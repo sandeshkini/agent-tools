@@ -1,0 +1,77 @@
+name: agent-tools
+# Shared agent services, extracted from agent-hub on 2026-08-11 so agent-hub can be fully retired.
+#   • artifacts  — the publish board          → apps.kingdomofluna.com/artifacts
+#   • ntfy       — the phone push bus          → ntfy.kingdomofluna.com  (host :8095)
+#   • mcp-tools  — shared MCP: publish_artifact + notify (cptr consumes it at 127.0.0.1:8009/mcp)
+# `apps` = the external Traefik network (shared, must already exist). Expand here as we add more
+# shared services/tools. Data dirs (artifacts/content, ntfy/data) are gitignored.
+
+services:
+  artifacts:
+    build: ./artifacts
+    image: agent-tools/artifacts
+    container_name: artifacts
+    restart: unless-stopped
+    environment:
+      BASE_PATH: "${ARTIFACTS_BASE_PATH:-/artifacts}"           # external prefix; traefik strips it
+      PUBLIC_BASE: "${ARTIFACTS_PUBLIC_BASE:-https://apps.kingdomofluna.com}"
+      PUBLISH_TOKEN: "${PUBLISH_TOKEN}"                          # gates POST /api/publish
+      NTFY_URL: "${NTFY_URL:-http://ntfy:80}"                    # container→container
+      NTFY_TOPIC: "${NTFY_TOPIC}"
+      NTFY_TOKEN: "${NTFY_TOKEN}"
+    volumes:
+      - ${ARTIFACTS_CONTENT:-./artifacts/content}:/content
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.artifacts.rule=Host(`${ARTIFACTS_DOMAIN:-apps.kingdomofluna.com}`) && PathPrefix(`${ARTIFACTS_BASE_PATH:-/artifacts}`)"
+      - "traefik.http.middlewares.artifacts-strip.stripprefix.prefixes=${ARTIFACTS_BASE_PATH:-/artifacts}"
+      - "traefik.http.routers.artifacts.middlewares=artifacts-strip"
+      - "traefik.http.services.artifacts.loadbalancer.server.port=8080"
+    networks: [default, apps]
+
+  ntfy:
+    image: binwiederhier/ntfy
+    container_name: ntfy
+    command: serve
+    restart: unless-stopped
+    environment:
+      NTFY_BASE_URL: "${NTFY_PUBLIC_URL:-https://ntfy.kingdomofluna.com}"
+      NTFY_UPSTREAM_BASE_URL: "https://ntfy.sh"                  # iOS instant push relay
+      NTFY_BEHIND_PROXY: "true"
+      NTFY_AUTH_FILE: "/var/lib/ntfy/user.db"
+      NTFY_AUTH_DEFAULT_ACCESS: "deny-all"                      # fail-closed
+      NTFY_CACHE_FILE: "/var/cache/ntfy/cache.db"
+      NTFY_ATTACHMENT_CACHE_DIR: "/var/cache/ntfy/attachments"
+      TZ: "${TZ:-America/Toronto}"
+    ports:
+      - "${NTFY_PORT:-8095}:80"
+    volumes:
+      - ${NTFY_DATA:-./ntfy/data}/lib:/var/lib/ntfy
+      - ${NTFY_DATA:-./ntfy/data}/cache:/var/cache/ntfy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ntfy.rule=Host(`${NTFY_DOMAIN:-ntfy.kingdomofluna.com}`)"
+      - "traefik.http.services.ntfy.loadbalancer.server.port=80"
+    networks: [default, apps]
+
+  mcp-tools:
+    build: ./mcp-tools
+    image: agent-tools/mcp-tools
+    container_name: mcp-tools
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8009:8000"                                   # cptr consumes this MCP endpoint
+    environment:
+      PORT: "8000"
+      ARTIFACTS_API: "${ARTIFACTS_API:-http://artifacts:8080/api/publish}"
+      PUBLIC_BASE: "${ARTIFACTS_PUBLIC_BASE:-https://apps.kingdomofluna.com}"
+      PUBLISH_TOKEN: "${PUBLISH_TOKEN}"
+      NTFY_URL: "${NTFY_URL:-http://ntfy}"
+      NTFY_TOPIC: "${NTFY_TOPIC}"
+      NTFY_TOKEN: "${NTFY_TOKEN}"
+    networks: [default, apps]
+
+networks:
+  default:
+  apps:
+    external: true

@@ -1,0 +1,5 @@
+.env
+artifacts/content/
+ntfy/data/
+**/__pycache__/
+node_modules/
