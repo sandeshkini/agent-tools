@@ -4,6 +4,7 @@ import path from 'node:path'
 import { marked } from 'marked'
 
 const ROOT = process.env.CONTENT_DIR || '/content'
+const VENDOR_DIR = path.join(path.dirname(new URL(import.meta.url).pathname), 'vendor')
 const BASE = process.env.BASE_PATH || ''            // external prefix (traefik strips it)
 const PORT = process.env.PORT || 8080
 const TOKEN = process.env.PUBLISH_TOKEN || ''       // required for POST /api/publish
@@ -56,10 +57,27 @@ h1{font-size:1.7rem;margin:0 0 4px}.sub{color:#8b98a9;margin:0 0 22px;font-size:
 </style>`
 const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
 const page = (t, b) => `<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>${esc(t)}</title>${CSS}<body>${b}</body>`
-const pretty = n => n.replace(/\.(md|html?)$/i, '').replace(/^\d{4}-\d{2}-\d{2}[-_]?/, '').replace(/[-_]/g, ' ').trim().replace(/\b\w/g, c => c.toUpperCase()) || n
+const pretty = n => n.replace(/\.code\.[a-z0-9+#-]+$/i, '').replace(/\.(md|html?|svg|mmd)$/i, '').replace(/^\d{4}-\d{2}-\d{2}[-_]?/, '').replace(/[-_]/g, ' ').trim().replace(/\b\w/g, c => c.toUpperCase()) || n
 const when = ms => new Date(ms).toLocaleString('en-CA', { dateStyle: 'medium', timeStyle: 'short' })
 const safe = p => path.normalize(p).replace(/^(\.\.[/\\])+/, '')
 const slug = s => (s || 'untitled').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60)
+const langSlug = s => (s || 'text').toLowerCase().replace(/[^a-z0-9+#-]/g, '') || 'text'
+
+// Badge shown on the board — sniffs the stored file/folder rather than needing a metadata
+// store, so it works for both new typed publishes and pre-existing plain md/html/app content.
+function itemBadge(kind, name) {
+  if (kind === 'app') {
+    try {
+      if (fs.readFileSync(path.join(ROOT, 'apps', name, '.type'), 'utf8').trim() === 'react') return '⚛️ react'
+    } catch { /* no .type marker → legacy/plain app */ }
+    return '🧩 app'
+  }
+  if (/\.svg$/i.test(name)) return '🎨 svg'
+  if (/\.mmd$/i.test(name)) return '🔀 mermaid'
+  if (/\.code\.[a-z0-9+#-]+$/i.test(name)) return '&lt;/&gt; code'
+  if (/\.html?$/i.test(name)) return '🌐 html'
+  return '📄 summary'
+}
 
 function allItems() {
   const out = []
@@ -69,7 +87,7 @@ function allItems() {
       if (name.startsWith('.')) continue
       const st = fs.statSync(path.join(dir, name))
       const href = kind === 'app' ? `${BASE}/apps/${encodeURIComponent(name)}/` : `${BASE}/summaries/${encodeURIComponent(name)}`
-      out.push({ kind, name, href, t: st.birthtimeMs || st.mtimeMs })
+      out.push({ kind, name, href, badge: itemBadge(kind, name), t: st.birthtimeMs || st.mtimeMs })
     }
   }
   return out.sort((a, b) => b.t - a.t)   // most-recent first, unified
@@ -77,15 +95,61 @@ function allItems() {
 function indexPage() {
   const items = allItems()
   const rows = items.map(i =>
-    `<a class=card href="${i.href}"><span class=badge>${i.kind === 'app' ? '🧩 app' : '📄 summary'}</span>` +
+    `<a class=card href="${i.href}"><span class=badge>${i.badge}</span>` +
     `<span class="grow"><div class=t>${esc(pretty(i.name))}</div><div class=d>${esc(when(i.t))}</div></span></a>`
   ).join('')
   return page('Artifacts',
-    `<h1>🗂️ Artifacts</h1><p class=sub>Everything from your work, newest first. Drop a <code>.md</code>/<code>.html</code> in <code>summaries/</code> or a folder in <code>apps/</code> — or POST to the publish API.</p>` +
+    `<h1>🗂️ Artifacts</h1><p class=sub>Everything from your work, newest first. Drop a file in <code>summaries/</code> (<code>.md</code>/<code>.html</code>/<code>.svg</code>/<code>.mmd</code>/<code>.code.&lt;lang&gt;</code>) or a folder in <code>apps/</code> — or POST to the publish API.</p>` +
     (rows || `<p class=sub>nothing yet</p>`))
 }
 
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.md': 'text/markdown' }
+
+// ── type-specific render helpers (svg/mermaid/code pages share the board's page() chrome) ──
+const backLink = `<a class=back href="${BASE}/">← board</a>`
+const svgPage = raw => `${backLink}<div class="content" style="text-align:center">${raw}</div>
+<details style="margin-top:14px"><summary style="cursor:pointer;color:#8b98a9">View source</summary><pre style="overflow:auto"><code>${esc(raw)}</code></pre></details>`
+const mermaidPage = raw => `${backLink}<div class="content"><div class="mermaid">${esc(raw)}</div></div>
+<details style="margin-top:14px"><summary style="cursor:pointer;color:#8b98a9">View source</summary><pre style="overflow:auto"><code>${esc(raw)}</code></pre></details>
+<script src="${BASE}/vendor/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true, theme:'dark'})</script>`
+const codePage = (raw, lang) => `${backLink}<div class="content"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+<span style="color:#8b98a9;font-size:.8rem">${esc(lang)}</span>
+<button onclick="navigator.clipboard.writeText(document.getElementById('src').textContent)" style="background:#1c212b;border:1px solid #2b3140;color:#c9d1d9;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:.78rem">Copy</button>
+</div><pre><code id=src class="language-${esc(lang)}">${esc(raw)}</code></pre></div>
+<link rel=stylesheet href="${BASE}/vendor/github-dark.min.css">
+<script src="${BASE}/vendor/highlight.min.js"></script>
+<script>hljs.highlightAll()</script>`
+
+// React artifacts are written as a plain self-running index.html — open it and it runs, no
+// preview wrapper/sandbox/chrome. Component must be named `App` (export default is fine too —
+// `export default function App(){}` still leaves `App` bound in module scope). React/ReactDOM/
+// Babel are vendored (offline-safe); optional extra libraries resolve via the import map below
+// and do hit a CDN (esm.sh) — that's the one piece that isn't vendored, expand as needed.
+const reactRuntimeHtml = (title, jsx) => `<!doctype html>
+<meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
+<title>${esc(title)}</title>
+<style>html,body{margin:0;background:#0f1115;color:#e6e6e6;font-family:system-ui,-apple-system,sans-serif}#root{min-height:100vh}</style>
+<div id="root"></div>
+<script src="${BASE}/vendor/react.production.min.js"></script>
+<script src="${BASE}/vendor/react-dom.production.min.js"></script>
+<script src="${BASE}/vendor/babel.min.js"></script>
+<script type="importmap">
+{"imports": {
+  "recharts": "https://esm.sh/recharts@2?bundle",
+  "lucide-react": "https://esm.sh/lucide-react@0.400?bundle",
+  "d3": "https://esm.sh/d3@7?bundle"
+}}
+</script>
+<script type="text/babel" data-presets="react" data-type="module">
+window.addEventListener('error', e => {
+  document.getElementById('root').innerHTML =
+    '<pre style="color:#ff6b6b;padding:20px;white-space:pre-wrap">' + (e.error?.stack || e.message) + '</pre>'
+})
+${jsx}
+
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App))
+</script>`
 const send = (res, code, body, type = 'text/html; charset=utf-8') => { res.writeHead(code, { 'content-type': type }); res.end(body) }
 
 async function readBody(req, max = 5_000_000) {
@@ -97,17 +161,38 @@ async function readBody(req, max = 5_000_000) {
 const server = http.createServer(async (req, res) => {
   const url = decodeURIComponent(req.url.split('?')[0])
 
-  // ── publish API (token-gated) ── POST {title, kind:summary|app, format:md|html, content}
+  // ── publish API (token-gated) ──
+  // POST {title, content, type: markdown|html|svg|mermaid|code|react|app, language?}
+  // `type` is the preferred field. `kind`/`format` (the original md|html|app pair) still work
+  // unchanged for back-compat — nothing already calling this API needs to change.
   if (req.method === 'POST' && url === '/api/publish') {
     if (!TOKEN || req.headers['x-publish-token'] !== TOKEN) return send(res, 401, JSON.stringify({ error: 'bad token' }), 'application/json')
     try {
-      const { title, kind = 'summary', format = 'md', content = '' } = JSON.parse(await readBody(req))
+      const body = JSON.parse(await readBody(req))
+      const { title, content = '', language = '' } = body
+      const type = body.type || (body.kind === 'app' ? 'app' : body.format === 'html' ? 'html' : 'markdown')
       if (!content) return send(res, 400, JSON.stringify({ error: 'content required' }), 'application/json')
       const date = new Date().toISOString().slice(0, 10)
       const base = `${date}-${slug(title)}`
       let rel
-      if (kind === 'app') { fs.mkdirSync(path.join(ROOT, 'apps', base), { recursive: true }); fs.writeFileSync(path.join(ROOT, 'apps', base, 'index.html'), content); rel = `/apps/${base}/` }
-      else { const ext = format === 'html' ? 'html' : 'md'; fs.writeFileSync(path.join(ROOT, 'summaries', `${base}.${ext}`), content); rel = `/summaries/${base}.${ext}` }
+      if (type === 'app' || type === 'react') {
+        const dir = path.join(ROOT, 'apps', base)
+        fs.mkdirSync(dir, { recursive: true })
+        fs.writeFileSync(path.join(dir, 'index.html'), type === 'react' ? reactRuntimeHtml(title, content) : content)
+        fs.writeFileSync(path.join(dir, '.type'), type)
+        rel = `/apps/${base}/`
+      } else if (type === 'svg') {
+        fs.writeFileSync(path.join(ROOT, 'summaries', `${base}.svg`), content); rel = `/summaries/${base}.svg`
+      } else if (type === 'mermaid') {
+        fs.writeFileSync(path.join(ROOT, 'summaries', `${base}.mmd`), content); rel = `/summaries/${base}.mmd`
+      } else if (type === 'code') {
+        const l = langSlug(language)
+        fs.writeFileSync(path.join(ROOT, 'summaries', `${base}.code.${l}`), content); rel = `/summaries/${base}.code.${l}`
+      } else if (type === 'html') {
+        fs.writeFileSync(path.join(ROOT, 'summaries', `${base}.html`), content); rel = `/summaries/${base}.html`
+      } else {
+        fs.writeFileSync(path.join(ROOT, 'summaries', `${base}.md`), content); rel = `/summaries/${base}.md`
+      }
       notifyPublish(title || pretty(path.basename(rel)), BASE + rel)   // fire-and-forget push
       return send(res, 200, JSON.stringify({ ok: true, url: BASE + rel }), 'application/json')
     } catch (e) { return send(res, 400, JSON.stringify({ error: String(e.message || e) }), 'application/json') }
@@ -124,12 +209,24 @@ const server = http.createServer(async (req, res) => {
 
   if (url === '/' || url === '') return send(res, 200, indexPage())
 
-  let m = url.match(/^\/summaries\/(.+)$/)
+  let m = url.match(/^\/vendor\/([^/]+)$/)
+  if (m) {
+    const f = path.join(VENDOR_DIR, safe(m[1]))
+    if (!fs.existsSync(f)) return send(res, 404, 'not found')
+    return send(res, 200, fs.readFileSync(f), TYPES[path.extname(f)] || 'application/octet-stream')
+  }
+
+  m = url.match(/^\/summaries\/(.+)$/)
   if (m) {
     const f = path.join(ROOT, 'summaries', safe(m[1]))
     if (!fs.existsSync(f)) return send(res, 404, page('404', 'Not found'))
     const raw = fs.readFileSync(f, 'utf8')
-    if (/\.md$/i.test(f)) return send(res, 200, page(pretty(path.basename(f)), `<a class=back href="${BASE}/">← board</a><article class=content>${marked.parse(raw)}</article>`))
+    const name = path.basename(f)
+    if (/\.md$/i.test(f)) return send(res, 200, page(pretty(name), `<a class=back href="${BASE}/">← board</a><article class=content>${marked.parse(raw)}</article>`))
+    if (/\.svg$/i.test(f)) return send(res, 200, page(pretty(name), svgPage(raw)))
+    if (/\.mmd$/i.test(f)) return send(res, 200, page(pretty(name), mermaidPage(raw)))
+    const codeMatch = /\.code\.([a-z0-9+#-]+)$/i.exec(f)
+    if (codeMatch) return send(res, 200, page(pretty(name), codePage(raw, codeMatch[1])))
     return send(res, 200, raw)
   }
   m = url.match(/^\/apps\/([^/]+)(\/.*)?$/)

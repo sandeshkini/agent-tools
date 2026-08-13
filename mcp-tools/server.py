@@ -33,9 +33,9 @@ mcp = FastMCP("agent-tools", host="0.0.0.0", port=int(os.getenv("PORT", "8000"))
 
 
 @mcp.tool()
-def publish_artifact(title: str, content_markdown: str) -> str:
-    """Publish a markdown summary as a shareable web page on the artifacts board
-    ($PUBLIC_BASE/artifacts) and send a phone notification. Returns the page URL.
+def publish_artifact(title: str, content_markdown: str, artifact_type: str = "markdown", language: str = "") -> str:
+    """Publish content as a shareable page on the artifacts board ($PUBLIC_BASE/artifacts)
+    and send a phone notification. Returns the page URL.
 
     WHEN TO USE: only when the user EXPLICITLY asks you to publish / share / save a page, OR for
     autonomous / scheduled work where no human is watching to do it themselves (e.g. a scheduled daily
@@ -44,10 +44,26 @@ def publish_artifact(title: str, content_markdown: str) -> str:
     shareable link genuinely adds value.
 
     :param title: Short title for the page.
-    :param content_markdown: The page body in markdown.
+    :param content_markdown: The page body — despite the param name, this holds whatever
+        `artifact_type` calls for (markdown text, an SVG document, Mermaid diagram source, a code
+        snippet, or a React component source). Kept named `content_markdown` so existing callers
+        that only pass (title, content_markdown) keep working exactly as before — the default
+        `artifact_type` is still "markdown".
+    :param artifact_type: one of:
+        - "markdown" (default) — rendered with the board's markdown styling
+        - "html"    — served as-authored, open it directly
+        - "svg"     — inlined on the page, with a "view source" toggle
+        - "mermaid" — diagram source, rendered client-side
+        - "code"    — syntax-highlighted; pass the language name via `language` (e.g. "python")
+        - "react"   — a React component. Define it as `function App() { ... }` (or
+          `export default function App() { ... }` — either works) using only JSX + the `App` name;
+          it's written as a plain, self-running index.html — open the URL and it runs, nothing else
+          to do. No import needed for React itself (it's already in scope); a few extra libraries
+          (recharts, lucide-react, d3) are available to `import` if the component needs charts/icons.
+    :param language: for artifact_type="code" only — the language name (e.g. "python", "bash", "sql").
     """
     try:
-        body = json.dumps({"title": title, "kind": "summary", "format": "md",
+        body = json.dumps({"title": title, "type": artifact_type, "language": language,
                            "content": content_markdown}).encode()
         req = urllib.request.Request(ARTIFACTS_API, data=body, method="POST",
                                      headers={"Content-Type": "application/json",
