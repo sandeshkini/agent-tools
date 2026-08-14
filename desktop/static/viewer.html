@@ -1,0 +1,207 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>desktop</title>
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;
+            font:13px/1.4 system-ui,-apple-system,sans-serif;color:#eee}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{max-width:100%;max-height:100%;object-fit:contain;cursor:crosshair;
+         touch-action:none;outline:none}
+  #hud{position:fixed;top:0;left:0;right:0;padding:6px 10px;background:#0009;
+       display:flex;gap:14px;align-items:center;backdrop-filter:blur(6px);
+       transition:opacity .25s;font-variant-numeric:tabular-nums}
+  #hud.idle{opacity:0}
+  .dot{width:8px;height:8px;border-radius:50%;background:#f43}
+  .dot.on{background:#3d6}
+  .sp{flex:1}
+  button{background:#ffffff1a;border:1px solid #ffffff2e;color:#eee;
+         border-radius:5px;padding:3px 9px;font:inherit;cursor:pointer}
+  button:hover{background:#ffffff2e}
+  kbd{background:#ffffff1a;border-radius:3px;padding:1px 4px;font-size:11px}
+</style>
+<body>
+<div id="wrap"><canvas id="screen" tabindex="0"></canvas></div>
+<div id="hud">
+  <span class="dot" id="dot"></span>
+  <span id="stat">connecting…</span>
+  <span class="sp"></span>
+  <span id="hint"><kbd>click</kbd> to control · <kbd>esc</kbd> releases keyboard</span>
+  <button id="keys">send ⌘</button>
+</div>
+<script>
+// No devtools available when viewed through cptr, so ship errors to the server.
+function report(msg) {
+  try { fetch('/clientlog', {method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({msg: String(msg)})}); } catch (_) {}
+}
+window.addEventListener('error', e => report('window.error: ' + e.message + ' @' + e.lineno));
+window.addEventListener('unhandledrejection', e => report('unhandled: ' + e.reason));
+report('page loaded, VideoDecoder=' + (typeof VideoDecoder) + ' url=' + location.href);
+
+const canvas = document.getElementById('screen');
+const ctx = canvas.getContext('2d');
+const dot = document.getElementById('dot');
+const stat = document.getElementById('stat');
+const hud = document.getElementById('hud');
+
+let socket, decoder, waitingKey = true;
+let frames = 0, bytes = 0, lastStat = performance.now();
+let controlling = false;
+let buttonsHeld = 0;
+
+// ---- rendering -------------------------------------------------------------
+function setupDecoder(codec, w, h) {
+  if (decoder && decoder.state !== 'closed') { try { decoder.close(); } catch (_) {} }
+  decoder = new VideoDecoder({
+    output: frame => {
+      if (canvas.width !== frame.displayWidth) {
+        canvas.width = frame.displayWidth;
+        canvas.height = frame.displayHeight;
+      }
+      ctx.drawImage(frame, 0, 0);
+      frame.close();
+      frames++;
+    },
+    error: e => { stat.textContent = 'decoder error: ' + e; }
+  });
+  // The encoder picks the codec by probing levels, then announces it. Using a
+  // hardcoded string here would break the moment the display resolution changes.
+  decoder.configure({ codec, codedWidth: w, codedHeight: h, optimizeForLatency: true });
+  waitingKey = true;
+}
+
+function connect() {
+  const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/viewer`;
+  socket = new WebSocket(url);
+  socket.binaryType = 'arraybuffer';
+  report('ws connecting to ' + url);
+  socket.onopen = () => { dot.classList.add('on'); stat.textContent = 'connected'; report('ws OPEN'); };
+  socket.onerror = () => report('ws ERROR');
+  socket.onclose = ev => {
+    report('ws CLOSED code=' + ev.code + ' reason=' + ev.reason);
+    dot.classList.remove('on');
+    waitingKey = true; setTimeout(connect, 800);
+  };
+  socket.onmessage = e => {
+    if (typeof e.data === 'string') {
+      try {
+        const info = JSON.parse(e.data);
+        if (info.codec) { setupDecoder(info.codec, info.width, info.height);
+                          report('decoder configured ' + info.codec + ' ' + info.width + 'x' + info.height); }
+      } catch (err) { report('decoder setup failed: ' + err); }
+      return;
+    }
+    if (!decoder || decoder.state !== 'configured') return;
+    const buf = new Uint8Array(e.data);
+    const isKey = buf[0] === 1;
+    const ts = new DataView(e.data).getUint32(1);
+    bytes += buf.byteLength;
+    // A decoder cannot start mid-GOP: ignore deltas until the first keyframe.
+    if (waitingKey && !isKey) return;
+    waitingKey = false;
+    try {
+      decoder.decode(new EncodedVideoChunk({
+        type: isKey ? 'key' : 'delta', timestamp: ts, data: buf.subarray(5)
+      }));
+    } catch (err) { waitingKey = true; }
+  };
+}
+
+setInterval(() => {
+  const now = performance.now(), dt = (now - lastStat) / 1000;
+  if (dt >= 1) {
+    const mbps = (bytes * 8 / dt / 1e6).toFixed(1);
+    stat.textContent = `${canvas.width}x${canvas.height} · ${Math.round(frames / dt)}fps · ${mbps} Mb/s`;
+    frames = 0; bytes = 0; lastStat = now;
+  }
+}, 1000);
+
+// ---- input -----------------------------------------------------------------
+// Always send NORMALIZED 0..1 coords: the server multiplies by the real display
+// bounds, so Retina scaling and canvas letterboxing both cancel out.
+function norm(e) {
+  const r = canvas.getBoundingClientRect();
+  return {
+    x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
+    y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)),
+    normalized: true
+  };
+}
+
+function send(kind, data) {
+  if (socket && socket.readyState === 1) {
+    socket.send(JSON.stringify({ kind, ...data }));
+  }
+}
+
+const BUTTONS = ['left', 'middle', 'right'];
+
+canvas.addEventListener('mousemove', e => {
+  send('pointer', { event: 'move', ...norm(e), buttons_held: buttonsHeld });
+});
+canvas.addEventListener('mousedown', e => {
+  e.preventDefault(); canvas.focus(); controlling = true;
+  buttonsHeld |= (1 << e.button);
+  send('pointer', { event: 'down', ...norm(e), button: BUTTONS[e.button] || 'left',
+                    click_count: e.detail || 1, modifiers: mods(e) });
+});
+window.addEventListener('mouseup', e => {
+  buttonsHeld &= ~(1 << e.button);
+  send('pointer', { event: 'up', ...norm(e), button: BUTTONS[e.button] || 'left',
+                    click_count: e.detail || 1, modifiers: mods(e) });
+});
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  send('wheel', { ...norm(e), delta_x: e.deltaX, delta_y: e.deltaY, modifiers: mods(e) });
+}, { passive: false });
+
+function mods(e) {
+  return (e.altKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.metaKey ? 4 : 0) | (e.shiftKey ? 8 : 0);
+}
+
+canvas.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && controlling) { controlling = false; canvas.blur(); }
+  e.preventDefault();
+  send('key', {
+    event: 'keyDown', key: e.key, code: e.code,
+    text: e.key.length === 1 ? e.key : '', modifiers: mods(e)
+  });
+});
+canvas.addEventListener('keyup', e => {
+  e.preventDefault();
+  send('key', { event: 'keyUp', key: e.key, code: e.code, text: '', modifiers: mods(e) });
+});
+
+// Cmd is swallowed by the local browser, so offer an explicit way to send it.
+document.getElementById('keys').onclick = () => {
+  const combo = prompt('send shortcut (e.g. "cmd+s", "cmd+shift+4")', 'cmd+s');
+  if (!combo) return;
+  const parts = combo.toLowerCase().split('+');
+  const key = parts.pop();
+  let m = 0;
+  if (parts.includes('cmd')) m |= 4;
+  if (parts.includes('shift')) m |= 8;
+  if (parts.includes('alt')) m |= 1;
+  if (parts.includes('ctrl')) m |= 2;
+  const code = key.length === 1 && key >= 'a' && key <= 'z'
+    ? 'Key' + key.toUpperCase()
+    : (key.length === 1 && key >= '0' && key <= '9' ? 'Digit' + key : key);
+  send('key', { event: 'keyDown', key, code, text: '', modifiers: m });
+  send('key', { event: 'keyUp', key, code, text: '', modifiers: m });
+  canvas.focus();
+};
+
+// auto-hide the hud
+let idle;
+function wake() {
+  hud.classList.remove('idle');
+  clearTimeout(idle);
+  idle = setTimeout(() => hud.classList.add('idle'), 2500);
+}
+document.addEventListener('mousemove', wake); wake();
+
+connect();   // decoder is configured when the codec announcement arrives
+</script>
+</body>

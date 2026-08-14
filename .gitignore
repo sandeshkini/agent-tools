@@ -3,3 +3,9 @@ artifacts/content/
 ntfy/data/
 **/__pycache__/
 node_modules/
+
+# host-tool build artifacts / envs (computer-input, desktop)
+**/.venv/
+*.pyc
+.DS_Store
+cptr-input/macos/cptr-input.app/
