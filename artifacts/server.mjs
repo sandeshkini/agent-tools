@@ -42,33 +42,90 @@ async function notifyPublish(title, relUrl) {
   } catch (e) { console.error('ntfy notify failed:', e.message) }
 }
 
+// Design language follows ~/Documents/guidelines/design-system.md (the "global" system shared
+// by Digest/Noted/Tracker/future apps) — same palette, mono chrome, card/badge/chip components —
+// so the board feels like part of the same family instead of a one-off tool aesthetic.
+const HEAD_FONTS = `<link rel=preconnect href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel=stylesheet>`
 const CSS = `<style>
-:root{color-scheme:dark}*{box-sizing:border-box}
-body{font-family:system-ui,-apple-system,sans-serif;max-width:820px;margin:0 auto;padding:34px 20px;line-height:1.6;background:#0f1115;color:#e6e6e6}
-a{color:#8ab4ff;text-decoration:none}a:hover{text-decoration:underline}
-h1{font-size:1.7rem;margin:0 0 4px;letter-spacing:-.01em}.sub{color:#8b98a9;margin:0;font-size:.92rem}
-.board-hdr{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:16px;flex-wrap:wrap}
-.search{background:#161a22;border:1px solid #242a35;border-radius:9px;color:#e6e6e6;padding:9px 13px;font-size:.88rem;min-width:200px;outline:none;transition:border-color .12s}
-.search:focus{border-color:#3a4658}.search::placeholder{color:#5c6675}
-.chips{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:18px}
-.chip{background:#161a22;border:1px solid #242a35;color:#9fb0c3;border-radius:20px;padding:5px 13px;font-size:.78rem;cursor:pointer;transition:.12s}
-.chip:hover{border-color:#3a4658;color:#e6e6e6}.chip.active{background:#233047;border-color:#3d5680;color:#bcd4ff}
-.card{display:flex;align-items:center;gap:12px;padding:13px 16px;margin:8px 0;background:#161a22;border:1px solid #242a35;border-radius:10px;transition:border-color .12s,transform .12s}
-.card:hover{border-color:#3a4658;transform:translateX(2px)}
-.badge{font-size:.7rem;padding:2px 9px;border-radius:20px;white-space:nowrap;border:1px solid;font-weight:600}
-.card .t{font-weight:600;color:#e9edf3}.card .d{font-size:.78rem;color:#8b98a9;margin-top:1px}.grow{flex:1;min-width:0}
-.empty{color:#8b98a9;padding:30px 0;text-align:center;font-size:.9rem}
-.content{background:#12151c;border:1px solid #242a35;border-radius:12px;padding:26px 30px}
-.content h2{color:#e9edf3;font-size:1.25rem}.content table{border-collapse:collapse;margin:12px 0}
-.content th,.content td{border:1px solid #242a35;padding:6px 11px;text-align:left}
-.content code{background:#0b0d11;padding:2px 6px;border-radius:5px}.content pre{background:#0b0d11;padding:14px;border-radius:9px;overflow:auto}
-.content blockquote{border-left:3px solid #3a4658;margin:0;padding-left:14px;color:#b9c2ce}
-.back{display:inline-block;margin-bottom:18px;color:#8b98a9;font-size:.9rem}
-.verpager{display:flex;align-items:center;justify-content:space-between;margin-top:16px;padding-top:14px;border-top:1px solid #242a35;font-size:.85rem;color:#8b98a9}
-.verpager a{color:#8ab4ff}.verpager-cur{color:#9fb0c3}
+:root{
+  color-scheme:dark;
+  --bg:#0d1117;--surface:#161b22;--surface2:#21262d;
+  --border:rgba(255,255,255,.08);--border-med:rgba(255,255,255,.15);
+  --text:#e2e8f0;--muted:#8b949e;--accent:#58a6ff;
+  --mono:'JetBrains Mono','SF Mono',Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:15px;line-height:1.65}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+
+.topbar{position:sticky;top:0;z-index:10;background:var(--surface);border-bottom:1px solid var(--border);
+  padding:.7rem 1.5rem;display:flex;align-items:center;gap:.6rem}
+.topbar-brand{font-family:var(--mono);font-size:.8rem;font-weight:700;letter-spacing:.04em;color:var(--text)}
+.topbar-sep{color:var(--border-med)}
+.topbar-title{font-family:var(--mono);font-size:.78rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.topbar-back{margin-left:auto;flex-shrink:0;font-family:var(--mono);font-size:.72rem;color:var(--muted);
+  padding:.32rem .7rem;border:1px solid var(--border);border-radius:6px;transition:.15s}
+.topbar-back:hover{color:var(--accent);border-color:var(--accent);text-decoration:none}
+
+.wrap{max-width:820px;margin:0 auto;padding:2rem 1.5rem 4rem}
+
+.board-hdr{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:18px;flex-wrap:wrap}
+h1{font-size:1.5rem;font-weight:700;letter-spacing:-.01em;margin:0 0 4px}
+.sub{color:var(--muted);margin:0;font-size:.82rem;font-family:var(--mono)}
+.search{background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);
+  padding:.6rem .85rem;font-size:.85rem;min-width:220px;outline:none;transition:border-color .15s}
+.search:focus{border-color:var(--accent)}.search::placeholder{color:var(--muted)}
+
+.chips{display:flex;gap:6px;margin-bottom:20px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex-shrink:0;font-family:var(--mono);background:var(--surface2);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.4rem .9rem;font-size:.72rem;font-weight:600;cursor:pointer;white-space:nowrap;transition:.15s}
+.chip:hover{border-color:var(--border-med);color:var(--text)}
+.chip.active{background:rgba(88,166,255,.12);border-color:rgba(88,166,255,.4);color:var(--accent)}
+
+.card{display:flex;align-items:center;gap:14px;padding:14px 16px;margin:8px 0;background:var(--surface);
+  border:1px solid var(--border);border-radius:10px;transition:border-color .15s,background .15s,transform .15s}
+.card:hover{border-color:rgba(88,166,255,.5);background:var(--surface2);transform:translateX(2px);text-decoration:none}
+.badge{font-family:var(--mono);font-size:.62rem;font-weight:700;letter-spacing:.03em;padding:.22rem .6rem;
+  border-radius:999px;border:1px solid;white-space:nowrap;flex-shrink:0}
+.grow{flex:1;min-width:0}
+.card .t{font-weight:600;color:var(--text);font-size:.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.card .d{font-size:.75rem;color:var(--muted);margin-top:2px;font-family:var(--mono)}
+.empty{color:var(--muted);padding:48px 0;text-align:center;font-size:.88rem;font-family:var(--mono)}
+
+.content{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:26px 30px}
+.content h2{color:var(--text);font-size:1.2rem;margin:1.1em 0 .5em}
+.content table{border-collapse:collapse;margin:12px 0;width:100%}
+.content th,.content td{border:1px solid var(--border);padding:6px 11px;text-align:left}
+.content code{background:var(--bg);padding:2px 6px;border-radius:5px;font-family:var(--mono);font-size:.85em}
+.content pre{background:var(--bg);padding:14px;border-radius:9px;overflow:auto}
+.content blockquote{border-left:3px solid var(--border-med);margin:0;padding-left:14px;color:var(--muted)}
+
+.verpager{display:flex;align-items:center;justify-content:space-between;margin-top:16px;padding-top:14px;
+  border-top:1px solid var(--border);font-size:.82rem;color:var(--muted);font-family:var(--mono)}
+.verpager a{color:var(--accent)}.verpager-cur{color:var(--muted)}
+
+@media (max-width:640px){
+  .topbar{padding:.6rem 1rem}
+  .topbar-title,.topbar-sep{display:none}
+  .wrap{padding:1.25rem 1rem 3rem}
+  .board-hdr{flex-direction:column;align-items:stretch;gap:12px}
+  .search{min-width:0;width:100%}
+  h1{font-size:1.3rem}
+  .card{padding:12px 14px;gap:10px}
+  .card .t{font-size:.88rem}
+  .content{padding:18px 16px}
+  .verpager{flex-wrap:wrap;gap:8px}
+}
 </style>`
 const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
-const page = (t, b) => `<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>${esc(t)}</title>${CSS}<body>${b}</body>`
+// `back:false` (index page only) hides the topbar's "← board" link since we're already there.
+const page = (t, b, { back = true } = {}) => `<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>${esc(t)}</title>${HEAD_FONTS}${CSS}<body>
+<div class=topbar><span class=topbar-brand>🗂️ artifacts</span>${back ? `<span class=topbar-sep>/</span><span class=topbar-title>${esc(t)}</span>` : ''}${back ? `<a class=topbar-back href="${BASE}/">← board</a>` : ''}</div>
+<div class=wrap>${b}</div>
+</body>`
 const pretty = n => n.replace(/\.code\.[a-z0-9+#-]+$/i, '').replace(/\.(md|html?|svg|mmd)$/i, '').replace(/^\d{4}-\d{2}-\d{2}[-_]?/, '').replace(/[-_]/g, ' ').trim().replace(/\b\w/g, c => c.toUpperCase()) || n
 const when = ms => new Date(ms).toLocaleString('en-CA', { dateStyle: 'medium', timeStyle: 'short' })
 const safe = p => path.normalize(p).replace(/^(\.\.[/\\])+/, '')
@@ -77,7 +134,7 @@ const langSlug = s => (s || 'text').toLowerCase().replace(/[^a-z0-9+#-]/g, '') |
 
 // ── per-type badge (color + label), shared by legacy filename-sniffed items and new
 // meta.json-backed artifacts ─────────────────────────────────────────────────────────
-const TYPE_COLOR = { markdown: '#8b98a9', html: '#60a5fa', svg: '#C39BD3', mermaid: '#E8A87C', code: '#52BE80', react: '#61dafb', app: '#8b98a9' }
+const TYPE_COLOR = { markdown: '#8b949e', html: '#58a6ff', svg: '#bc8cff', mermaid: '#d29922', code: '#3fb950', react: '#56d4dd', app: '#8b949e' }
 const TYPE_LABEL = { markdown: '📄 summary', html: '🌐 html', svg: '🎨 svg', mermaid: '🔀 mermaid', code: '&lt;/&gt; code', react: '⚛️ react', app: '🧩 app' }
 const badgeHtml = type => {
   const c = TYPE_COLOR[type] || TYPE_COLOR.markdown, l = TYPE_LABEL[type] || TYPE_LABEL.markdown
@@ -151,7 +208,7 @@ function indexPage() {
     `<button class="chip${t === 'all' ? ' active' : ''}" data-filter="${t}">${t === 'all' ? 'All' : TYPE_LABEL[t].replace(/^[^ ]+ /, '')}</button>`
   ).join('')
   return page('Artifacts', `
-<div class=board-hdr><div><h1>🗂️ Artifacts</h1><p class=sub>${items.length} published, newest first.</p></div>
+<div class=board-hdr><div><h1>Artifacts</h1><p class=sub>${items.length} published, newest first.</p></div>
 <input id=search class=search placeholder="Filter by name…" oninput="filterBoard()"></div>
 <div class=chips id=chips>${chips}</div>
 <div id=list>${rows || `<p class=empty>Nothing published yet.</p>`}</div>
@@ -171,27 +228,27 @@ document.getElementById('chips').addEventListener('click', function(e){
   b.classList.add('active');
   filterBoard();
 });
-</script>`)
+</script>`, { back: false })
 }
 
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.md': 'text/markdown' }
 
-// ── type-specific render helpers (svg/mermaid/code pages share the board's page() chrome) ──
-const backLink = `<a class=back href="${BASE}/">← board</a>`
-const svgPage = raw => `${backLink}<div class="content" style="text-align:center">${raw}</div>
-<details style="margin-top:14px"><summary style="cursor:pointer;color:#8b98a9">View source</summary><pre style="overflow:auto"><code>${esc(raw)}</code></pre></details>`
-const mermaidPage = raw => `${backLink}<div class="content"><div class="mermaid">${esc(raw)}</div></div>
-<details style="margin-top:14px"><summary style="cursor:pointer;color:#8b98a9">View source</summary><pre style="overflow:auto"><code>${esc(raw)}</code></pre></details>
+// ── type-specific render helpers (svg/mermaid/code pages share the board's page() chrome —
+// the topbar's own "← board" link handles navigation, so these are just the content) ──
+const svgPage = raw => `<div class="content" style="text-align:center">${raw}</div>
+<details style="margin-top:14px"><summary style="cursor:pointer;color:var(--muted)">View source</summary><pre style="overflow:auto"><code>${esc(raw)}</code></pre></details>`
+const mermaidPage = raw => `<div class="content"><div class="mermaid">${esc(raw)}</div></div>
+<details style="margin-top:14px"><summary style="cursor:pointer;color:var(--muted)">View source</summary><pre style="overflow:auto"><code>${esc(raw)}</code></pre></details>
 <script src="${BASE}/vendor/mermaid.min.js"></script>
 <script>mermaid.initialize({startOnLoad:true, theme:'dark'})</script>`
-const codePage = (raw, lang) => `${backLink}<div class="content"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-<span style="color:#8b98a9;font-size:.8rem">${esc(lang)}</span>
-<button onclick="navigator.clipboard.writeText(document.getElementById('src').textContent)" style="background:#1c212b;border:1px solid #2b3140;color:#c9d1d9;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:.78rem">Copy</button>
+const codePage = (raw, lang) => `<div class="content"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+<span style="color:var(--muted);font-size:.8rem;font-family:var(--mono)">${esc(lang)}</span>
+<button onclick="navigator.clipboard.writeText(document.getElementById('src').textContent)" style="background:var(--surface2);border:1px solid var(--border-med);color:var(--text);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:.78rem;font-family:var(--mono)">Copy</button>
 </div><pre><code id=src class="language-${esc(lang)}">${esc(raw)}</code></pre></div>
 <link rel=stylesheet href="${BASE}/vendor/github-dark.min.css">
 <script src="${BASE}/vendor/highlight.min.js"></script>
 <script>hljs.highlightAll()</script>`
-const markdownPage = raw => `${backLink}<article class=content>${marked.parse(raw)}</article>`
+const markdownPage = raw => `<article class=content>${marked.parse(raw)}</article>`
 
 // React artifacts are written as a plain self-running index.html — open it and it runs, no
 // preview wrapper/sandbox/chrome. Component must be named `App` (export default is fine too —
@@ -361,12 +418,12 @@ const server = http.createServer(async (req, res) => {
   m = url.match(/^\/a\/([^/]+)(?:\/v\/(\d+))?\/?$/)
   if (m) {
     const meta = readMeta(m[1])
-    if (!meta) return send(res, 404, page('404', 'Not found'))
+    if (!meta) return send(res, 404, page('Not found', '<p class=empty>Not found</p>'))
     const n = m[2] ? parseInt(m[2], 10) : meta.versions.length
     const ver = meta.versions.find(v => v.n === n)
-    if (!ver) return send(res, 404, page('404', 'Version not found'))
+    if (!ver) return send(res, 404, page('Not found', '<p class=empty>That version doesn\'t exist</p>'))
     const f = path.join(artifactDir(meta.id), `v${n}`, ver.file)
-    if (!fs.existsSync(f)) return send(res, 404, page('404', 'Not found'))
+    if (!fs.existsSync(f)) return send(res, 404, page('Not found', '<p class=empty>Not found</p>'))
     const raw = fs.readFileSync(f, 'utf8')
     if (OPENABLE_TYPES.has(meta.type)) return send(res, 200, raw)
     const pager = meta.versions.length > 1 ? versionPager(meta.id, n, meta.versions.length) : ''
@@ -376,7 +433,7 @@ const server = http.createServer(async (req, res) => {
   m = url.match(/^\/summaries\/(.+)$/)
   if (m) {
     const f = path.join(ROOT, 'summaries', safe(m[1]))
-    if (!fs.existsSync(f)) return send(res, 404, page('404', 'Not found'))
+    if (!fs.existsSync(f)) return send(res, 404, page('Not found', '<p class=empty>Not found</p>'))
     const raw = fs.readFileSync(f, 'utf8')
     const name = path.basename(f)
     if (/\.md$/i.test(f)) return send(res, 200, page(pretty(name), markdownPage(raw)))
@@ -390,9 +447,9 @@ const server = http.createServer(async (req, res) => {
   if (m) {
     let rel = safe(m[2] || '/'); if (rel === '/' || rel === '') rel = '/index.html'
     const f = path.join(ROOT, 'apps', m[1], rel)
-    if (!fs.existsSync(f) || fs.statSync(f).isDirectory()) return send(res, 404, page('404', 'Not found'))
+    if (!fs.existsSync(f) || fs.statSync(f).isDirectory()) return send(res, 404, page('Not found', '<p class=empty>Not found</p>'))
     return send(res, 200, fs.readFileSync(f), TYPES[path.extname(f)] || 'application/octet-stream')
   }
-  send(res, 404, page('404', `<a href="${BASE}/">← board</a><p>Not found</p>`))
+  send(res, 404, page('Not found', '<p class=empty>Not found</p>'))
 })
 server.listen(PORT, () => console.log(`artifacts board on :${PORT} base='${BASE}' publish=${TOKEN ? 'on' : 'off'}`))
