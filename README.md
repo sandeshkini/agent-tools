@@ -22,10 +22,11 @@ from any device, browser-only, no native app on the viewing end.
 | Tool | What | Install |
 |---|---|---|
 | `cptr-input` | desktop streaming (headless Chrome + H.264, `cptr-input/desktop/`) + the cross-platform input daemon that drives it (mouse/keyboard over a socket, `cptr-input/`) | `cptr-input/install.sh` (daemon); `desktop/desktop_server.py` run under launchd/systemd (streaming) |
+| `cptr-watchdog` | periodic self-heal for cptr's own service — re-registers it if the launchd job/systemd unit was deregistered entirely (not just crashed; `KeepAlive`/`Restart=always` don't cover that), restarts it if registered but unhealthy | `cptr-watchdog/install.sh` |
 
-See `cptr-input/README.md`. It carries per-machine service state (paths differ
-per host), so the installer generates the launchd/systemd unit rather than
-shipping one checked in.
+See `cptr-input/README.md` and `cptr-watchdog/README.md`. Both carry per-machine
+service state (paths/ports differ per host), so the installers generate the
+launchd/systemd unit rather than shipping one checked in.
 
 > A related host-level fix — `loopback-shim`, which patches an IPv4/IPv6 quirk in
 > **cptr's own** built-in chrome-mode viewer (unrelated to the `cptr-input`
