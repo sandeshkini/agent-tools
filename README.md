@@ -1,7 +1,7 @@
 # agent-tools
 
 Shared, always-on agent services on aibo. Extracted from `agent-hub` on 2026-08-11 so agent-hub
-(the retired OWUI stack) could be fully stopped. **cptr** (`~/Documents/aibo-server/Services/cptr.md`)
+(the retired OWUI stack) could be fully stopped. **cptr** (`~/Documents/aibo-server/Services/cptr/README.md`)
 is the primary agent UI now and consumes these.
 
 ### Docker services (`docker compose`)
@@ -30,8 +30,8 @@ shipping one checked in.
 > A related host-level fix — `loopback-shim`, which patches an IPv4/IPv6 quirk in
 > **cptr's own** built-in chrome-mode viewer (unrelated to the `cptr-input`
 > streaming tool above) — lives with the rest of the cptr hub docs at
-> `~/Documents/aibo-server/Services/cptr/` instead of here, since it fixes cptr
-> itself rather than adding a shared tool.
+> `~/Documents/aibo-server/Services/cptr/host-fixes/loopback-shim/` instead of
+> here, since it fixes cptr itself rather than adding a shared tool.
 
 ## Run
 ```bash
