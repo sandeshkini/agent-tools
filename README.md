@@ -12,20 +12,26 @@ is the primary agent UI now and consumes these.
 | `ntfy` | phone push bus | `ntfy.kingdomofluna.com`, host `:8095` |
 | `mcp-tools` | shared MCP: `publish_artifact` + `notify` | `127.0.0.1:8009/mcp` (cptr consumes this) |
 
-### Host daemons (`./install.sh`, not Docker)
+### Host daemon (`./install.sh`, not Docker)
 
-These need direct hardware access (inject input, capture the screen), so they run
-on the host via launchd (macOS) / systemd (Linux), not in containers. They let a
-cptr tab **be** the whole workstation — see the browser desktop from any device.
+Needs direct hardware access (inject input, capture the screen), so it runs on
+the host via launchd (macOS) / systemd (Linux), not in a container. Lets a cptr
+tab **be** the whole workstation — see and control the machine's real desktop
+from any device, browser-only, no native app on the viewing end.
 
 | Tool | What | Install |
 |---|---|---|
-| `cptr-input` | cross-platform input daemon (drive mouse/keyboard from a socket) | `cptr-input/install.sh` |
-| `desktop` | stream this machine's screen to a browser + control it (uses `cptr-input`) | run `desktop/desktop_server.py` under launchd/systemd |
-| `loopback-shim` | IPv4→IPv6 shim so cptr's chrome-mode browser reaches its own encoder | `loopback-shim/` (launchd) |
+| `cptr-input` | desktop streaming (headless Chrome + H.264, `cptr-input/desktop/`) + the cross-platform input daemon that drives it (mouse/keyboard over a socket, `cptr-input/`) | `cptr-input/install.sh` (daemon); `desktop/desktop_server.py` run under launchd/systemd (streaming) |
 
-Each host tool has its own README. They carry per-machine services (paths differ
-per host), so the installers generate the launchd/systemd units.
+See `cptr-input/README.md`. It carries per-machine service state (paths differ
+per host), so the installer generates the launchd/systemd unit rather than
+shipping one checked in.
+
+> A related host-level fix — `loopback-shim`, which patches an IPv4/IPv6 quirk in
+> **cptr's own** built-in chrome-mode viewer (unrelated to the `cptr-input`
+> streaming tool above) — lives with the rest of the cptr hub docs at
+> `~/Documents/aibo-server/Services/cptr/` instead of here, since it fixes cptr
+> itself rather than adding a shared tool.
 
 ## Run
 ```bash

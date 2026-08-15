@@ -1,8 +1,9 @@
-# Desktop — your Mac in a browser tab
+# Desktop streaming — your Mac in a browser tab
 
-Stream this Mac's screen to a browser and control it — mouse, keyboard, scroll.
-No native app on the viewing device. Open one URL from a phone, a laptop, or a
-cptr tab.
+Part of the [`cptr-input`](..) tool: streams this Mac's screen to a browser and
+lets you control it — mouse, keyboard, scroll. No native app on the viewing
+device. Open one URL from a phone, a laptop, or a cptr tab. Uses the
+`cptr-input` daemon one directory up for the actual click/keystroke injection.
 
     encoder Chrome  --H.264-->  desktop_server  --H.264-->  your browser
       (this Mac)                   (relay)                   (anywhere)
@@ -48,13 +49,13 @@ If a future macOS/Chrome renames the source, re-find it:
 
 | file | role |
 |---|---|
-| `desktop_server.py` | FastAPI relay: fans one encoder stream to many viewers, routes input to the helper |
+| `desktop_server.py` | FastAPI relay: fans one encoder stream to many viewers; **production** input path imports `client.py` one directory up (`../client.py`, the neutral cptr-input daemon client) and calls `dispatch(kind, data)` over the unix socket |
 | `static/encoder.html` | runs in the headless Chrome; captures the screen, encodes H.264 (WebCodecs) |
 | `static/viewer.html`  | the page you open; decodes H.264, sends pointer/key/wheel |
 | `mapper.py` | cptr-style input message -> macOS CGEvent parameters (pure, testable) |
-| `client.py` | talks to the `cptr-input` helper over `~/.cptr/input.sock` |
-| input | delegated to the `cptr-input` tool (see ../cptr-input) |
-| `tests/` | the staged verification scripts (simulate, warp, post, capture) |
+| `mapper_client.py` | a **second, lower-level** client used only by `tests/verify_helper.py` — talks to the same `cptr-input` unix socket but takes a `Display` + planned `mapper.py` events instead of raw daemon ops. Kept for the on-device verification harness (captures + times injected events); not used by `desktop_server.py`. |
+| `inject.py` | test-only: posts CGEvents directly (bypassing the daemon) for `tests/verify_*.py` |
+| `tests/` | the staged verification scripts (simulate, warp, post, capture, the real `mapper_client.py` end-to-end proof) |
 
 ## How input works (and the trap)
 

@@ -12,7 +12,7 @@ import time
 
 import Quartz
 
-import client
+import mapper_client as client
 import inject
 import mapper
 import probe_display

@@ -29,8 +29,8 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 
 import sys as _sys, os as _os
-# the cptr-input client is a sibling tool in this repo; resolve it relative to here
-_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "cptr-input"))
+# the cptr-input client lives one directory up (this is now cptr-input/desktop/)
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), ".."))
 import client  # neutral cptr-input client (macOS/Linux)
 import mapper
 import probe_display

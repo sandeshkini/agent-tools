@@ -1,15 +1,30 @@
 # cptr-input
 
-Cross-platform input-injection daemon: drives the real mouse/keyboard of the
-machine it runs on, from a unix socket. macOS and Linux, one protocol, one
-client. Used by the browser-desktop app (`../desktop`) so a browser viewer can
-control the host.
+Turns a cptr tab into the whole workstation: **desktop streaming** (stream this
+machine's screen to any browser, headless Chrome + H.264) plus the
+**cross-platform input daemon** that makes it controllable — drives the real
+mouse/keyboard of the machine it runs on, from a unix socket. macOS and Linux,
+one protocol, one client.
 
+    encoder Chrome  --H.264-->  desktop/desktop_server.py  --H.264-->  your browser
+      (this machine)                    (relay)                        (anywhere)
+                                            ^                              |
+                                            +--------- input events -------+
+                                            |
     client (any consumer)  --JSON over ~/.cptr/input.sock-->  cptr-input daemon
                                                                  |
                                         macOS: CGEvent   /   Linux: uinput
                                                                  v
                                                              the real OS
+
+## Two halves, one tool
+
+- **`./` (this directory)** — the input daemon: `protocol.md`, `client.py`,
+  `install.sh`, `macos/`, `linux/`. Standalone; anything can drive the host
+  through it, not just the desktop streamer below.
+- **`./desktop`** — the screen-streaming server + viewer that uses the daemon
+  above for its clicks/keystrokes. See `desktop/README.md` for the streaming
+  side (Chrome capture, codec, Pangolin exposure, launchd service).
 
 ## Install
 
