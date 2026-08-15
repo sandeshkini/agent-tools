@@ -14,6 +14,16 @@ const NTFY_URL = process.env.NTFY_URL || ''         // e.g. http://ntfy:80  (int
 const NTFY_TOPIC = process.env.NTFY_TOPIC || ''
 const NTFY_TOKEN = process.env.NTFY_TOKEN || ''
 const PUBLIC_BASE = process.env.PUBLIC_BASE || 'https://apps.kingdomofluna.com'
+// Pangolin resource for this hostname has SSO off (other systems need to push
+// without an interactive login) -- so this process must enforce on its own
+// that the push-only hostname can ONLY reach the token-gated write routes.
+// Everything else (viewing the board, listing content) stays exclusively on
+// the SSO-protected hostname. Mirrors the register.dispatch.* pattern.
+const PUSH_ONLY_HOST = process.env.PUSH_ONLY_HOST || 'push.artifacts.kingdomofluna.com'
+const PUSH_ONLY_ROUTES = [
+  ['POST', '/api/publish'],
+  ['POST', '/api/artifacts'],
+]
 
 const ARTIFACTS_DIR = path.join(ROOT, 'artifacts')
 for (const d of ['summaries', 'apps', 'artifacts']) fs.mkdirSync(path.join(ROOT, d), { recursive: true })
@@ -302,6 +312,20 @@ const requireToken = (req, res) => {
 
 const server = http.createServer(async (req, res) => {
   const url = decodeURIComponent(req.url.split('?')[0])
+
+  // Requests arriving on the push-only (no-SSO) hostname may ONLY reach the
+  // token-gated write routes -- everything else 404s here, before any route
+  // below gets a chance to serve it. Requests on any other Host (the SSO'd
+  // hostname, or plain container-to-container calls with no Host match) are
+  // unaffected and fall through to normal routing.
+  const reqHost = (req.headers.host || '').split(':')[0]
+  if (reqHost === PUSH_ONLY_HOST) {
+    const isPublish = PUSH_ONLY_ROUTES.some(([m, p]) => req.method === m && url === p)
+    const isEdit = req.method === 'PUT' && /^\/api\/artifacts\/[^/]+$/.test(url)
+    if (!isPublish && !isEdit) {
+      return send(res, 404, JSON.stringify({ error: 'not found' }), 'application/json')
+    }
+  }
 
   // ── publish API (token-gated, one-shot, no id/versioning) ──
   // POST {title, content, type: markdown|html|svg|mermaid|code|react|app, language?}
