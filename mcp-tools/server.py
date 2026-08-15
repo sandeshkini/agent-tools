@@ -27,6 +27,18 @@ _ARTIFACTS_BASE = ARTIFACTS_API.rsplit("/api/", 1)[0]
 ARTIFACTS_CREATE_API = f"{_ARTIFACTS_BASE}/api/artifacts"
 ARTIFACTS_LIST_API = f"{_ARTIFACTS_BASE}/api/list"
 PUBLISH_TOKEN = os.getenv("PUBLISH_TOKEN", "")
+# Stamped onto every artifact this instance publishes/creates, so the board can show/filter
+# "which system sent it" without trusting the calling LLM to type it correctly per-call. Set
+# once per deployment (this server is the single shared MCP endpoint every agent on the box
+# hits), not something the agent decides — override via env if this instance ever serves a
+# distinguishable different caller.
+SOURCE_LABEL = os.getenv("SOURCE_LABEL", "cptr")
+# Which physical machine this instance runs on (e.g. "aibo-linux", "aibo-mac" — see
+# ~/Documents/aibo-server/Infrastructure/machines.md for the canonical names). A container's own
+# hostname is useless here (just its container ID), so this MUST be set explicitly per machine in
+# that machine's own agent-tools/.env (COMPUTER_LABEL=...) — no reliable auto-detect from inside
+# Docker. Separate dimension from SOURCE_LABEL: multiple machines can all publish as source=cptr.
+COMPUTER_LABEL = os.getenv("COMPUTER_LABEL", "unknown")
 PUBLIC_BASE = os.getenv("PUBLIC_BASE", "http://localhost:8080")
 NTFY_BASE = os.getenv("NTFY_URL", "http://ntfy").rstrip("/")
 NTFY_TOPIC = os.getenv("NTFY_TOPIC", "aibo")
@@ -72,7 +84,7 @@ def publish_artifact(title: str, content_markdown: str, artifact_type: str = "ma
     """
     try:
         body = json.dumps({"title": title, "type": artifact_type, "language": language,
-                           "content": content_markdown}).encode()
+                           "content": content_markdown, "source": SOURCE_LABEL, "computer": COMPUTER_LABEL}).encode()
         req = urllib.request.Request(ARTIFACTS_API, data=body, method="POST",
                                      headers={"Content-Type": "application/json",
                                               "X-Publish-Token": PUBLISH_TOKEN})
@@ -98,7 +110,7 @@ def create_artifact(title: str, content: str, artifact_type: str = "markdown", l
     """
     try:
         body = json.dumps({"title": title, "type": artifact_type, "language": language,
-                           "content": content}).encode()
+                           "content": content, "source": SOURCE_LABEL, "computer": COMPUTER_LABEL}).encode()
         req = urllib.request.Request(ARTIFACTS_CREATE_API, data=body, method="POST",
                                      headers={"Content-Type": "application/json",
                                               "X-Publish-Token": PUBLISH_TOKEN})
@@ -144,7 +156,9 @@ def list_artifacts() -> str:
         for i in items[:30]:
             tag = f" id={i['id']}" if i.get("id") else ""
             ver = f" (v{i['versions']})" if i.get("versions", 1) > 1 else ""
-            lines.append(f"- [{i.get('type')}] {i.get('name')}{ver}{tag} -> {PUBLIC_BASE}{i.get('href')}")
+            src = f" src={i['source']}" if i.get("source") else ""
+            comp = f" @{i['computer']}" if i.get("computer") else ""
+            lines.append(f"- [{i.get('type')}] {i.get('name')}{ver}{tag}{src}{comp} -> {PUBLIC_BASE}{i.get('href')}")
         return "\n".join(lines)
     except Exception as e:
         return f"list_artifacts failed: {e}"

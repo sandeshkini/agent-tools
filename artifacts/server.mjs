@@ -88,21 +88,33 @@ h1{font-size:1.5rem;font-weight:700;letter-spacing:-.01em;margin:0 0 4px}
   padding:.6rem .85rem;font-size:.85rem;min-width:220px;outline:none;transition:border-color .15s}
 .search:focus{border-color:var(--accent)}.search::placeholder{color:var(--muted)}
 
-.chips{display:flex;gap:6px;margin-bottom:20px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.filters{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
+.filter-group{display:flex;align-items:center;gap:10px}
+.filter-label{flex-shrink:0;width:38px;font-family:var(--mono);font-size:.66rem;font-weight:700;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.05em}
+.chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .chips::-webkit-scrollbar{display:none}
 .chip{flex-shrink:0;font-family:var(--mono);background:var(--surface2);border:1px solid var(--border);color:var(--muted);
   border-radius:999px;padding:.4rem .9rem;font-size:.72rem;font-weight:600;cursor:pointer;white-space:nowrap;transition:.15s}
 .chip:hover{border-color:var(--border-med);color:var(--text)}
 .chip.active{background:rgba(88,166,255,.12);border-color:rgba(88,166,255,.4);color:var(--accent)}
 
-.card{display:flex;align-items:center;gap:14px;padding:14px 16px;margin:8px 0;background:var(--surface);
+.group{margin-bottom:4px}
+.day-hdr{font-family:var(--mono);font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.08em;margin:24px 2px 8px}
+.group:first-child .day-hdr{margin-top:0}
+
+.card{display:flex;align-items:center;gap:13px;padding:11px 14px;margin:6px 0;background:var(--surface);
   border:1px solid var(--border);border-radius:10px;transition:border-color .15s,background .15s,transform .15s}
 .card:hover{border-color:rgba(88,166,255,.5);background:var(--surface2);transform:translateX(2px);text-decoration:none}
-.badge{font-family:var(--mono);font-size:.62rem;font-weight:700;letter-spacing:.03em;padding:.22rem .6rem;
-  border-radius:999px;border:1px solid;white-space:nowrap;flex-shrink:0}
+.type-ico{flex-shrink:0;width:32px;height:32px;border-radius:8px;border:1px solid;display:flex;
+  align-items:center;justify-content:center;font-size:.95rem;line-height:1}
 .grow{flex:1;min-width:0}
-.card .t{font-weight:600;color:var(--text);font-size:.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.card .d{font-size:.75rem;color:var(--muted);margin-top:2px;font-family:var(--mono)}
+.card .t{font-weight:600;color:var(--text);font-size:.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.card .d{font-size:.72rem;color:var(--muted);margin-top:2px;font-family:var(--mono);text-transform:capitalize;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chev{flex-shrink:0;color:var(--muted);font-size:1.05rem;opacity:.4;transition:.15s ease}
+.card:hover .chev{opacity:1;color:var(--accent);transform:translateX(2px)}
 .empty{color:var(--muted);padding:48px 0;text-align:center;font-size:.88rem;font-family:var(--mono)}
 
 .content{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:26px 30px}
@@ -124,8 +136,11 @@ h1{font-size:1.5rem;font-weight:700;letter-spacing:-.01em;margin:0 0 4px}
   .board-hdr{flex-direction:column;align-items:stretch;gap:12px}
   .search{min-width:0;width:100%}
   h1{font-size:1.3rem}
-  .card{padding:12px 14px;gap:10px}
+  .card{padding:10px 12px;gap:10px}
   .card .t{font-size:.88rem}
+  .type-ico{width:28px;height:28px;font-size:.85rem}
+  .chev{display:none}
+  .filter-label{width:auto;font-size:.6rem}
   .content{padding:18px 16px}
   .verpager{flex-wrap:wrap;gap:8px}
 }
@@ -137,18 +152,31 @@ const page = (t, b, { back = true } = {}) => `<!doctype html><meta charset=utf-8
 <div class=wrap>${b}</div>
 </body>`
 const pretty = n => n.replace(/\.code\.[a-z0-9+#-]+$/i, '').replace(/\.(md|html?|svg|mmd)$/i, '').replace(/^\d{4}-\d{2}-\d{2}[-_]?/, '').replace(/[-_]/g, ' ').trim().replace(/\b\w/g, c => c.toUpperCase()) || n
-const when = ms => new Date(ms).toLocaleString('en-CA', { dateStyle: 'medium', timeStyle: 'short' })
+const when = ms => new Date(ms).toLocaleTimeString('en-CA', { timeStyle: 'short' })
+// "Today" / "Yesterday" / "Aug 11, 2026" — groups the board index into date sections instead
+// of repeating a full timestamp on every row.
+function dayLabel(ms) {
+  const d = new Date(ms), now = new Date()
+  const midnight = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+  const diff = Math.round((midnight(now) - midnight(d)) / 86400000)
+  if (diff === 0) return 'Today'
+  if (diff === 1) return 'Yesterday'
+  return d.toLocaleDateString('en-CA', { dateStyle: 'medium' })
+}
 const safe = p => path.normalize(p).replace(/^(\.\.[/\\])+/, '')
 const slug = s => (s || 'untitled').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60)
 const langSlug = s => (s || 'text').toLowerCase().replace(/[^a-z0-9+#-]/g, '') || 'text'
 
-// ── per-type badge (color + label), shared by legacy filename-sniffed items and new
-// meta.json-backed artifacts ─────────────────────────────────────────────────────────
+// ── per-type styling (color + icon + name), shared by legacy filename-sniffed items and
+// new meta.json-backed artifacts ─────────────────────────────────────────────────────────
 const TYPE_COLOR = { markdown: '#8b949e', html: '#58a6ff', svg: '#bc8cff', mermaid: '#d29922', code: '#3fb950', react: '#56d4dd', app: '#8b949e' }
 const TYPE_LABEL = { markdown: '📄 summary', html: '🌐 html', svg: '🎨 svg', mermaid: '🔀 mermaid', code: '&lt;/&gt; code', react: '⚛️ react', app: '🧩 app' }
-const badgeHtml = type => {
-  const c = TYPE_COLOR[type] || TYPE_COLOR.markdown, l = TYPE_LABEL[type] || TYPE_LABEL.markdown
-  return `<span class=badge style="background:${c}1f;color:${c};border-color:${c}40">${l}</span>`
+const TYPE_ICON = { markdown: '📄', html: '🌐', svg: '🎨', mermaid: '🔀', code: '{ }', react: '⚛️', app: '🧩' }
+const TYPE_NAME = { markdown: 'summary', html: 'html', svg: 'svg', mermaid: 'mermaid', code: 'code', react: 'react', app: 'app' }
+// compact icon square used on board-index rows — replaces the old text pill
+const typeIconHtml = type => {
+  const c = TYPE_COLOR[type] || TYPE_COLOR.markdown, i = TYPE_ICON[type] || TYPE_ICON.markdown
+  return `<span class=type-ico style="background:${c}1f;color:${c};border-color:${c}40">${i}</span>`
 }
 // legacy (pre-versioning) content is typed by sniffing its filename/folder — no metadata store
 function legacyItemType(kind, name) {
@@ -162,6 +190,19 @@ function legacyItemType(kind, name) {
   if (/\.html?$/i.test(name)) return 'html'
   return 'markdown'
 }
+// ── "which system published this" / "which computer sent it" — same sidecar-marker trick as
+// the `.type` react marker above: a plain-text file next to (apps: inside) the content, written
+// only if the publisher sent that field. Absent sidecar → the given fallback (dropped on disk /
+// published without declaring one — same bucket, no way to tell them apart after the fact).
+function legacySidecar(field, fallback) {
+  const legacyPath = (kind, name) => kind === 'app' ? path.join(ROOT, 'apps', name, `.${field}`) : path.join(ROOT, 'summaries', `${name}.${field}`)
+  const read = (kind, name) => { try { return fs.readFileSync(legacyPath(kind, name), 'utf8').trim() || fallback } catch { return fallback } }
+  return { path: legacyPath, read }
+}
+const sourceSidecar = legacySidecar('source', 'manual')
+const computerSidecar = legacySidecar('computer', 'unknown')
+const readLegacySource = sourceSidecar.read
+const readLegacyComputer = computerSidecar.read
 
 // ── versioned artifacts (content/artifacts/<id>/meta.json + v1/, v2/, ...) ──────────
 // Additive: legacy `summaries/`+`apps/` content (and the /api/publish endpoint that writes
@@ -192,10 +233,10 @@ function allItems() {
   for (const [kind, sub] of [['summary', 'summaries'], ['app', 'apps']]) {
     const dir = path.join(ROOT, sub)
     for (const name of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
-      if (name.startsWith('.')) continue
+      if (name.startsWith('.') || name.endsWith('.source') || name.endsWith('.computer')) continue   // dotfiles + sidecars aren't items
       const st = fs.statSync(path.join(dir, name))
       const href = kind === 'app' ? `${BASE}/apps/${encodeURIComponent(name)}/` : `${BASE}/summaries/${encodeURIComponent(name)}`
-      out.push({ kind, name: pretty(name), href, type: legacyItemType(kind, name), versions: 1, t: st.birthtimeMs || st.mtimeMs })
+      out.push({ kind, name: pretty(name), href, type: legacyItemType(kind, name), source: readLegacySource(kind, name), computer: readLegacyComputer(kind, name), versions: 1, t: st.birthtimeMs || st.mtimeMs })
     }
   }
   for (const id of fs.existsSync(ARTIFACTS_DIR) ? fs.readdirSync(ARTIFACTS_DIR) : []) {
@@ -203,40 +244,73 @@ function allItems() {
     const meta = readMeta(id)
     if (!meta || !meta.versions?.length) continue
     const latest = meta.versions[meta.versions.length - 1]
-    out.push({ kind: 'artifact', id, name: meta.title, href: `${BASE}/a/${encodeURIComponent(id)}`, type: meta.type, versions: meta.versions.length, t: latest.created })
+    out.push({ kind: 'artifact', id, name: meta.title, href: `${BASE}/a/${encodeURIComponent(id)}`, type: meta.type, source: meta.source || 'manual', computer: meta.computer || 'unknown', versions: meta.versions.length, t: latest.created })
   }
   return out.sort((a, b) => b.t - a.t)   // most-recent first (an update bumps its artifact back to the top)
 }
 function indexPage() {
   const items = allItems()
   const types = [...new Set(items.map(i => i.type))]
-  const rows = items.map(i =>
-    `<a class=card data-type="${i.type}" data-q="${esc(i.name.toLowerCase())}" href="${i.href}">${badgeHtml(i.type)}` +
-    `<span class="grow"><div class=t>${esc(i.name)}</div><div class=d>${esc(when(i.t))}${i.versions > 1 ? ` · v${i.versions}` : ''}</div></span></a>`
-  ).join('')
-  const chips = ['all', ...types].map(t =>
-    `<button class="chip${t === 'all' ? ' active' : ''}" data-filter="${t}">${t === 'all' ? 'All' : TYPE_LABEL[t].replace(/^[^ ]+ /, '')}</button>`
-  ).join('')
+  // bucket into same-day groups, preserving the newest-first order already on `items`
+  const groups = []
+  for (const i of items) {
+    const label = dayLabel(i.t)
+    const g = groups[groups.length - 1]
+    if (g && g.label === label) g.items.push(i)
+    else groups.push({ label, items: [i] })
+  }
+  const sources = [...new Set(items.map(i => i.source || 'manual'))].sort()
+  const computers = [...new Set(items.map(i => i.computer || 'unknown'))].sort()
+  const row = i => `<a class=card data-type="${i.type}" data-source="${esc(i.source || 'manual')}" data-computer="${esc(i.computer || 'unknown')}" data-q="${esc(i.name.toLowerCase())}" href="${i.href}">${typeIconHtml(i.type)}` +
+    `<span class="grow"><div class=t>${esc(i.name)}</div><div class=d>${TYPE_NAME[i.type] || 'summary'} · ${esc(i.source || 'manual')} · ${esc(i.computer || 'unknown')} · ${esc(when(i.t))}${i.versions > 1 ? ` · v${i.versions}` : ''}</div></span>` +
+    `<span class=chev>›</span></a>`
+  const groupsHtml = groups.map(g => `<div class=group><div class=day-hdr>${esc(g.label)}</div>${g.items.map(row).join('')}</div>`).join('')
+  const chipRow = (id, active, opts, label) => `<div class=filter-group><span class=filter-label>${label}</span>` +
+    `<div class="chips chiprow" id=${id}>${opts.map(o =>
+      `<button class="chip${o.v === active ? ' active' : ''}" data-filter="${esc(o.v)}">${esc(o.t)}</button>`
+    ).join('')}</div></div>`
+  const filtersHtml = `<div class=filters>${
+    chipRow('chips', 'all', [{ v: 'all', t: 'All' }, ...types.map(t => ({ v: t, t: TYPE_LABEL[t].replace(/^[^ ]+ /, '') }))], 'Type')
+  }${
+    sources.length > 1 ? chipRow('sourceChips', 'all', [{ v: 'all', t: 'All' }, ...sources.map(s => ({ v: s, t: s }))], 'Source') : ''
+  }${
+    computers.length > 1 ? chipRow('computerChips', 'all', [{ v: 'all', t: 'All' }, ...computers.map(c => ({ v: c, t: c }))], 'Computer') : ''
+  }</div>`
   return page('Artifacts', `
 <div class=board-hdr><div><h1>Artifacts</h1><p class=sub>${items.length} published, newest first.</p></div>
 <input id=search class=search placeholder="Filter by name…" oninput="filterBoard()"></div>
-<div class=chips id=chips>${chips}</div>
-<div id=list>${rows || `<p class=empty>Nothing published yet.</p>`}</div>
+${filtersHtml}
+<div id=list>${groupsHtml || `<p class=empty>Nothing published yet.</p>`}</div>
+<p id=noresults class=empty style="display:none">No matches.</p>
 <script>
+function activeOf(id){ var row=document.getElementById(id); return row ? row.querySelector('.chip.active').dataset.filter : 'all'; }
 function filterBoard(){
   var q=(document.getElementById('search').value||'').toLowerCase();
-  var active=document.querySelector('.chip.active').dataset.filter;
-  document.querySelectorAll('#list .card').forEach(function(c){
-    var okType = active==='all' || c.dataset.type===active;
-    var okQuery = !q || c.dataset.q.indexOf(q)>-1;
-    c.style.display = (okType&&okQuery) ? '' : 'none';
+  var activeType=activeOf('chips'), activeSource=activeOf('sourceChips'), activeComputer=activeOf('computerChips');
+  var anyVisible=false;
+  document.querySelectorAll('#list .group').forEach(function(g){
+    var groupVisible=false;
+    g.querySelectorAll('.card').forEach(function(c){
+      var okType = activeType==='all' || c.dataset.type===activeType;
+      var okSource = activeSource==='all' || c.dataset.source===activeSource;
+      var okComputer = activeComputer==='all' || c.dataset.computer===activeComputer;
+      var okQuery = !q || c.dataset.q.indexOf(q)>-1;
+      var show = okType&&okSource&&okComputer&&okQuery;
+      c.style.display = show ? '' : 'none';
+      if(show) groupVisible=true;
+    });
+    g.style.display = groupVisible ? '' : 'none';
+    if(groupVisible) anyVisible=true;
   });
+  document.getElementById('noresults').style.display = anyVisible ? 'none' : '';
 }
-document.getElementById('chips').addEventListener('click', function(e){
-  var b=e.target.closest('.chip'); if(!b) return;
-  document.querySelectorAll('.chip').forEach(function(x){x.classList.remove('active')});
-  b.classList.add('active');
-  filterBoard();
+document.querySelectorAll('.chiprow').forEach(function(row){
+  row.addEventListener('click', function(e){
+    var b=e.target.closest('.chip'); if(!b) return;
+    row.querySelectorAll('.chip').forEach(function(x){x.classList.remove('active')});
+    b.classList.add('active');
+    filterBoard();
+  });
 });
 </script>`, { back: false })
 }
@@ -328,14 +402,19 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ── publish API (token-gated, one-shot, no id/versioning) ──
-  // POST {title, content, type: markdown|html|svg|mermaid|code|react|app, language?}
+  // POST {title, content, type: markdown|html|svg|mermaid|code|react|app, language?, source?, computer?}
   // `type` is the preferred field. `kind`/`format` (the original md|html|app pair) still work
   // unchanged for back-compat — nothing already calling this API needs to change, forever.
+  // `source` (optional, free text — e.g. "cptr", "aibo-mac-pipeline") identifies which system
+  // published this; `computer` (optional, e.g. "aibo-linux", "aibo-mac") identifies which
+  // physical machine sent it — separate dimensions (a "cptr" publish can come from either
+  // machine). Both stored as sidecar markers (same trick as the `.type` react marker), shown on
+  // the board and filterable. Omitted → 'manual' / 'unknown' respectively.
   if (req.method === 'POST' && url === '/api/publish') {
     if (!requireToken(req, res)) return
     try {
       const body = JSON.parse(await readBody(req))
-      const { title, content = '', language = '' } = body
+      const { title, content = '', language = '', source = '', computer = '' } = body
       const type = body.type || (body.kind === 'app' ? 'app' : body.format === 'html' ? 'html' : 'markdown')
       if (!content) return send(res, 400, JSON.stringify({ error: 'content required' }), 'application/json')
       const date = new Date().toISOString().slice(0, 10)
@@ -346,6 +425,8 @@ const server = http.createServer(async (req, res) => {
         fs.mkdirSync(dir, { recursive: true })
         fs.writeFileSync(path.join(dir, 'index.html'), type === 'react' ? reactRuntimeHtml(title, content) : content)
         fs.writeFileSync(path.join(dir, '.type'), type)
+        if (source) fs.writeFileSync(path.join(dir, '.source'), source)
+        if (computer) fs.writeFileSync(path.join(dir, '.computer'), computer)
         rel = `/apps/${base}/`
       } else if (type === 'svg') {
         fs.writeFileSync(path.join(ROOT, 'summaries', `${base}.svg`), content); rel = `/summaries/${base}.svg`
@@ -359,19 +440,26 @@ const server = http.createServer(async (req, res) => {
       } else {
         fs.writeFileSync(path.join(ROOT, 'summaries', `${base}.md`), content); rel = `/summaries/${base}.md`
       }
+      if (type !== 'app' && type !== 'react') {
+        const disk = path.basename(rel)
+        if (source) fs.writeFileSync(path.join(ROOT, 'summaries', `${disk}.source`), source)
+        if (computer) fs.writeFileSync(path.join(ROOT, 'summaries', `${disk}.computer`), computer)
+      }
       notifyPublish(title || pretty(path.basename(rel)), BASE + rel)   // fire-and-forget push
       return send(res, 200, JSON.stringify({ ok: true, url: BASE + rel }), 'application/json')
     } catch (e) { return send(res, 400, JSON.stringify({ error: String(e.message || e) }), 'application/json') }
   }
 
   // ── versioned artifacts API (token-gated) ──
-  // POST /api/artifacts            {title, content, type?, language?} → {id, url, version:1}
-  // PUT  /api/artifacts/:id        {content, language?}               → {id, url, version:N}
+  // POST /api/artifacts            {title, content, type?, language?, source?, computer?} → {id, url, version:1}
+  // PUT  /api/artifacts/:id        {content, language?, source?, computer?}               → {id, url, version:N}
+  // `source`/`computer` are artifact-level (like title/type), not per-version: set on create,
+  // optionally reset on update if a different system/machine pushes a new version.
   if (req.method === 'POST' && url === '/api/artifacts') {
     if (!requireToken(req, res)) return
     try {
       const body = JSON.parse(await readBody(req))
-      const { title, content = '', language = '' } = body
+      const { title, content = '', language = '', source = '', computer = '' } = body
       const type = body.type || 'markdown'
       if (!title) return send(res, 400, JSON.stringify({ error: 'title required' }), 'application/json')
       if (!content) return send(res, 400, JSON.stringify({ error: 'content required' }), 'application/json')
@@ -380,7 +468,7 @@ const server = http.createServer(async (req, res) => {
       const fname = versionFile(type, language)
       fs.mkdirSync(path.join(artifactDir(id), 'v1'), { recursive: true })
       fs.writeFileSync(path.join(artifactDir(id), 'v1', fname), type === 'react' ? reactRuntimeHtml(title, content) : content)
-      writeMeta(id, { id, title, type, language: type === 'code' ? langSlug(language) : '', created: now, versions: [{ n: 1, created: now, file: fname }] })
+      writeMeta(id, { id, title, type, language: type === 'code' ? langSlug(language) : '', source: source || 'manual', computer: computer || 'unknown', created: now, versions: [{ n: 1, created: now, file: fname }] })
       const rel = `/a/${id}`
       notifyPublish(title, BASE + rel)
       return send(res, 200, JSON.stringify({ ok: true, id, url: BASE + rel, version: 1 }), 'application/json')
@@ -403,6 +491,8 @@ const server = http.createServer(async (req, res) => {
       fs.mkdirSync(path.join(artifactDir(id), `v${n}`), { recursive: true })
       fs.writeFileSync(path.join(artifactDir(id), `v${n}`, fname), meta.type === 'react' ? reactRuntimeHtml(meta.title, content) : content)
       if (meta.type === 'code' && language) meta.language = langSlug(language)
+      if (body.source) meta.source = body.source
+      if (body.computer) meta.computer = body.computer
       meta.versions.push({ n, created: now, file: fname })
       writeMeta(id, meta)
       const rel = `/a/${id}`
@@ -413,10 +503,10 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method !== 'GET') return send(res, 405, 'method not allowed')
 
-  // ── JSON list API ── GET /api/list → { items:[{kind, name, href, type, versions, created}] }
+  // ── JSON list API ── GET /api/list → { items:[{kind, name, href, type, source, computer, versions, created}] }
   // (newest first). Powers the OWUI native Artifacts panel + list_artifacts MCP tool.
   if (url === '/api/list') {
-    const items = allItems().map(i => ({ kind: i.kind, id: i.id, name: i.name, href: i.href, type: i.type, versions: i.versions, created: i.t }))
+    const items = allItems().map(i => ({ kind: i.kind, id: i.id, name: i.name, href: i.href, type: i.type, source: i.source, computer: i.computer, versions: i.versions, created: i.t }))
     return send(res, 200, JSON.stringify({ items }), 'application/json')
   }
   m = url.match(/^\/api\/artifacts\/([^/]+)$/)

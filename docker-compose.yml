@@ -63,6 +63,8 @@ services:
       ARTIFACTS_API: "${ARTIFACTS_API:-http://artifacts:8080/api/publish}"
       PUBLIC_BASE: "${ARTIFACTS_PUBLIC_BASE:-https://apps.kingdomofluna.com}"
       PUBLISH_TOKEN: "${PUBLISH_TOKEN}"
+      SOURCE_LABEL: "${MCP_SOURCE_LABEL:-cptr}"                   # stamped on every artifact this server publishes/creates
+      COMPUTER_LABEL: "${COMPUTER_LABEL:-unknown}"                # which machine this deployment runs on — set per-machine in .env
       NTFY_URL: "${NTFY_URL:-http://ntfy}"
       NTFY_TOPIC: "${NTFY_TOPIC}"
       NTFY_TOKEN: "${NTFY_TOKEN}"
