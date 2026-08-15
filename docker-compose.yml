@@ -13,8 +13,8 @@ services:
     container_name: artifacts
     restart: unless-stopped
     environment:
-      BASE_PATH: "${ARTIFACTS_BASE_PATH:-/artifacts}"           # external prefix; traefik strips it
-      PUBLIC_BASE: "${ARTIFACTS_PUBLIC_BASE:-https://apps.kingdomofluna.com}"
+      BASE_PATH: "${ARTIFACTS_BASE_PATH:-}"                      # served at domain root now
+      PUBLIC_BASE: "${ARTIFACTS_PUBLIC_BASE:-https://artifacts.kingdomofluna.com}"
       PUBLISH_TOKEN: "${PUBLISH_TOKEN}"                          # gates POST /api/publish
       NTFY_URL: "${NTFY_URL:-http://ntfy:80}"                    # container→container
       NTFY_TOPIC: "${NTFY_TOPIC}"
@@ -24,17 +24,11 @@ services:
       - ${ARTIFACTS_CONTENT:-./artifacts/content}:/content
     labels:
       - "traefik.enable=true"
-      # legacy path-based route, kept alive during the cutover to the two
-      # dedicated hostnames below -- drop this once Pangolin resources for
-      # both new hostnames exist and everything's verified working.
-      - "traefik.http.routers.artifacts.rule=Host(`${ARTIFACTS_DOMAIN:-apps.kingdomofluna.com}`) && PathPrefix(`${ARTIFACTS_BASE_PATH:-/artifacts}`)"
-      - "traefik.http.middlewares.artifacts-strip.stripprefix.prefixes=${ARTIFACTS_BASE_PATH:-/artifacts}"
-      - "traefik.http.routers.artifacts.middlewares=artifacts-strip"
       - "traefik.http.services.artifacts.loadbalancer.server.port=8080"
-      # new: dedicated domain, SSO'd, human browsing (Pangolin resource: user-managed)
+      # dedicated domain, SSO'd, human browsing
       - "traefik.http.routers.artifacts-web.rule=Host(`${ARTIFACTS_WEB_DOMAIN:-artifacts.kingdomofluna.com}`)"
       - "traefik.http.routers.artifacts-web.service=artifacts"
-      # new: push-only domain, SSO off at Pangolin, PUSH_ONLY_HOST above
+      # push-only domain, SSO off at Pangolin, PUSH_ONLY_HOST above
       # restricts this hostname to the token-gated write routes in-app
       - "traefik.http.routers.artifacts-push.rule=Host(`${ARTIFACTS_PUSH_HOST:-push.artifacts.kingdomofluna.com}`)"
       - "traefik.http.routers.artifacts-push.service=artifacts"
