@@ -20,18 +20,10 @@ services:
       NTFY_TOPIC: "${NTFY_TOPIC}"
       NTFY_TOKEN: "${NTFY_TOKEN}"
       PUSH_ONLY_HOST: "${ARTIFACTS_PUSH_HOST:-push.artifacts.kingdomofluna.com}"
+    ports:
+      - "127.0.0.1:8083:8080"   # direct -- traefik removed 2026-08-15, was its last real consumer
     volumes:
       - ${ARTIFACTS_CONTENT:-./artifacts/content}:/content
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.services.artifacts.loadbalancer.server.port=8080"
-      # dedicated domain, SSO'd, human browsing
-      - "traefik.http.routers.artifacts-web.rule=Host(`${ARTIFACTS_WEB_DOMAIN:-artifacts.kingdomofluna.com}`)"
-      - "traefik.http.routers.artifacts-web.service=artifacts"
-      # push-only domain, SSO off at Pangolin, PUSH_ONLY_HOST above
-      # restricts this hostname to the token-gated write routes in-app
-      - "traefik.http.routers.artifacts-push.rule=Host(`${ARTIFACTS_PUSH_HOST:-push.artifacts.kingdomofluna.com}`)"
-      - "traefik.http.routers.artifacts-push.service=artifacts"
     networks: [default, apps]
 
   ntfy:
