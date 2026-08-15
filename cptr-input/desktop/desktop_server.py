@@ -551,11 +551,17 @@ async def ws_viewer(ws: WebSocket) -> None:
 if __name__ == "__main__":
     import uvicorn
 
-    # 0.0.0.0, not "::" -- on macOS a "::" bind goes IPv6-ONLY and kills IPv4/LAN
-    # access. So point the Pangolin resource at 127.0.0.1:38218 explicitly;
-    # a "localhost" target makes newt dial [::1] and 502.
+    # 127.0.0.1, not "::" and not "0.0.0.0". "::" on macOS binds IPv6-ONLY and
+    # kills IPv4 access -- newt (Pangolin's tunnel target is 127.0.0.1:38218
+    # explicitly; "localhost" makes newt dial [::1] and 502) needs IPv4. But
+    # 0.0.0.0 goes further than newt needs: it also answers on the LAN interface,
+    # with no auth at that layer -- this server has zero of its own (SSO is
+    # Pangolin's job, entirely in front of the tunnel), so 0.0.0.0 meant any
+    # device on the same wifi got unauthenticated mouse/keyboard control of this
+    # Mac. 127.0.0.1 satisfies newt (same machine, connects over loopback) and
+    # closes that off -- the ONLY way in is through the SSO'd tunnel.
     uvicorn.run(
-        app, host="0.0.0.0", port=PORT, log_level="info",
+        app, host="127.0.0.1", port=PORT, log_level="info",
         # The queued fan-out already keeps handlers responsive, but a viewer on a
         # bad link can still be slow to pong. 20s was tight enough to kill live
         # connections; 60s still notices a genuinely dead peer within ~80s.
