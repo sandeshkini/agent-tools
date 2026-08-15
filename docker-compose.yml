@@ -61,7 +61,7 @@ services:
     environment:
       PORT: "8000"
       ARTIFACTS_API: "${ARTIFACTS_API:-http://artifacts:8080/api/publish}"
-      PUBLIC_BASE: "${ARTIFACTS_PUBLIC_BASE:-https://apps.kingdomofluna.com}"
+      PUBLIC_BASE: "${ARTIFACTS_PUBLIC_BASE:-https://artifacts.kingdomofluna.com}"   # apps.kingdomofluna.com is retired (orphaned 2026-08-15) — don't revert this
       PUBLISH_TOKEN: "${PUBLISH_TOKEN}"
       SOURCE_LABEL: "${MCP_SOURCE_LABEL:-cptr}"                   # stamped on every artifact this server publishes/creates
       COMPUTER_LABEL: "${COMPUTER_LABEL:-unknown}"                # which machine this deployment runs on — set per-machine in .env

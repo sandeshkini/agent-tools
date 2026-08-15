@@ -1,18 +1,31 @@
 #!/usr/bin/env python3
 """
-agent-tools — one shared MCP server for ALL agents (claude / hermes / opencode).
+agent-tools — one shared MCP server for every agent that reaches this machine (cptr's Claude
+Code + OpenCode; formerly Hermes too, retired 2026-08-11).
 
-Exposes two tools that every agent gets from this single place (add a tool here → every agent
-gets it, no per-adapter work):
-  • publish_artifact(title, content_markdown) → publishes a page to the artifacts board
-    (POSTs the artifacts API, which also fires an ntfy phone push) and returns the URL.
-  • notify(title, message, priority)          → sends a phone push via ntfy (no page).
+Exposes 5 tools from this one place (add a tool here → every agent gets it, no per-adapter
+work) — 2 for the artifacts board, 2 for versioned artifacts, 1 for phone push:
+  • publish_artifact(title, content_markdown, artifact_type="markdown", language="")
+      one-shot publish (dated file, no id) → POSTs /api/publish, fires an ntfy push, returns URL.
+  • create_artifact(title, content, artifact_type="markdown", language="")
+      versioned publish (stable id, v1) → POSTs /api/artifacts, for content you'll revise later.
+  • update_artifact(artifact_id, content, language="")
+      pushes a new version (v2, v3, ...) to an existing id's SAME url — PUTs /api/artifacts/:id.
+  • list_artifacts() → newest-first text listing (name/type/version/id/source/computer/url), so
+      an agent can find an id before calling update_artifact.
+  • notify(title, message, priority) → sends a phone push via ntfy, no page.
+
+Every artifact this server publishes/creates is auto-tagged with SOURCE_LABEL (which system —
+default "cptr") and COMPUTER_LABEL (which machine — no default, must be set per-deployment; see
+docker-compose.yml / install.sh) so the board can show/filter "who sent this" without the calling
+agent ever declaring it. Neither is an agent-facing tool parameter on purpose — it's a deployment
+fact, not a per-call judgment call.
 
 Served over Streamable HTTP at /mcp so every agent reaches it by URL:
-  - containers (owui-claude, opencode) → http://mcp-tools:8000/mcp   (compose network)
-  - host Hermes                        → http://127.0.0.1:<published>/mcp
+  - containers (Claude Code / OpenCode via cptr) → http://mcp-tools:8000/mcp   (compose network)
+  - a second machine's host install (install.sh) → http://127.0.0.1:8009/mcp   (its own instance)
 MCP tool calls surface in each agent as ordinary tool_use/tool_result → they render as the
-adapters' native OWUI tool cards ("✓ View Result from …").
+adapters' native tool-call cards.
 """
 import datetime
 import json

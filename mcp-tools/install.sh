@@ -17,6 +17,12 @@ fi
 : "${PUBLISH_TOKEN:?PUBLISH_TOKEN required — same value as aibo's agent-tools/.env}"
 : "${NTFY_TOKEN:?NTFY_TOKEN required — same value as aibo's agent-tools/.env}"
 NTFY_TOPIC="${NTFY_TOPIC:-aibo}"
+SOURCE_LABEL="${SOURCE_LABEL:-cptr}"
+# Which machine this is (shows on the board + is filterable) — macOS actually knows its own
+# name, unlike a Docker container, so auto-detect instead of forcing a manual value every time.
+# Override with COMPUTER_LABEL=... if you want something other than the System Settings name
+# (e.g. to match the canonical short names in machines.md, like "aibo-mac").
+COMPUTER_LABEL="${COMPUTER_LABEL:-$(scutil --get ComputerName 2>/dev/null || hostname -s)}"
 
 echo "== venv + deps =="
 command -v uv >/dev/null || { echo "uv required (same tool cptr installs via) — https://docs.astral.sh/uv/"; exit 1; }
@@ -42,9 +48,11 @@ cat > "$PLIST" <<PL
   <dict>
     <key>HOST</key><string>127.0.0.1</string>
     <key>PORT</key><string>8009</string>
-    <key>ARTIFACTS_API</key><string>https://apps.kingdomofluna.com/artifacts/api/publish</string>
-    <key>PUBLIC_BASE</key><string>https://apps.kingdomofluna.com</string>
+    <key>ARTIFACTS_API</key><string>https://push.artifacts.kingdomofluna.com/api/publish</string>
+    <key>PUBLIC_BASE</key><string>https://artifacts.kingdomofluna.com</string>
     <key>PUBLISH_TOKEN</key><string>$PUBLISH_TOKEN</string>
+    <key>SOURCE_LABEL</key><string>$SOURCE_LABEL</string>
+    <key>COMPUTER_LABEL</key><string>$COMPUTER_LABEL</string>
     <key>NTFY_URL</key><string>https://ntfy.kingdomofluna.com</string>
     <key>NTFY_TOPIC</key><string>$NTFY_TOPIC</string>
     <key>NTFY_TOKEN</key><string>$NTFY_TOKEN</string>
@@ -61,6 +69,7 @@ launchctl bootout "gui/$(id -u)/com.sandesh.mcp-tools" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$PLIST"
 
 echo
+echo "computer label: $COMPUTER_LABEL  (override with COMPUTER_LABEL=... if that's not what you want)"
 echo "started (binds 127.0.0.1:8009 only — HOST override keeps it off the LAN). verify:"
 echo "  curl -s http://127.0.0.1:8009/mcp"
 echo "  tail -f /tmp/mcp-tools.log"
