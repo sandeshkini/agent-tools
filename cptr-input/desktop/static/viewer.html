@@ -32,8 +32,11 @@
 <script>
 // No devtools available when viewed through cptr, so ship errors to the server.
 function report(msg) {
+  // .catch() is load bearing: without it a failed report rejects, fires
+  // unhandledrejection below, which calls report() again -- a feedback loop that
+  // spins while the server is unreachable.
   try { fetch('/clientlog', {method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({msg: String(msg)})}); } catch (_) {}
+        body: JSON.stringify({msg: String(msg)})}).catch(() => {}); } catch (_) {}
 }
 window.addEventListener('error', e => report('window.error: ' + e.message + ' @' + e.lineno));
 window.addEventListener('unhandledrejection', e => report('unhandled: ' + e.reason));
