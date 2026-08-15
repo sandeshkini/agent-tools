@@ -19,9 +19,15 @@
          border-radius:5px;padding:3px 9px;font:inherit;cursor:pointer}
   button:hover{background:#ffffff2e}
   kbd{background:#ffffff1a;border-radius:3px;padding:1px 4px;font-size:11px}
+  /* pointer-events:none -- the overlay must never swallow a click or a paste */
+  #stale{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+         background:#0007;pointer-events:none}
+  #stale.on{display:flex}
+  #stale span{background:#000d;border:1px solid #ffffff2e;border-radius:6px;padding:9px 14px}
 </style>
 <body>
 <div id="wrap"><canvas id="screen" tabindex="0"></canvas></div>
+<div id="stale"><span id="staleMsg"></span></div>
 <div id="hud">
   <span class="dot" id="dot"></span>
   <span id="stat">connecting…</span>
@@ -47,6 +53,8 @@ const ctx = canvas.getContext('2d');
 const dot = document.getElementById('dot');
 const stat = document.getElementById('stat');
 const hud = document.getElementById('hud');
+const staleBox = document.getElementById('stale');
+const staleMsg = document.getElementById('staleMsg');
 
 let socket, decoder, waitingKey = true;
 let frames = 0, bytes = 0, lastStat = performance.now();
@@ -95,6 +103,7 @@ function connect() {
       } catch (err) { report('decoder setup failed: ' + err); }
       return;
     }
+    sawFrame();   // liveness is about ARRIVAL, not decodability
     if (!decoder || decoder.state !== 'configured') return;
     const buf = new Uint8Array(e.data);
     const isKey = buf[0] === 1;
@@ -119,6 +128,40 @@ setInterval(() => {
     frames = 0; bytes = 0; lastStat = now;
   }
 }, 1000);
+
+// ---- stale-stream watchdog -------------------------------------------------
+// A dead stream does not always close the socket. The relay can wedge, or the
+// link can black-hole packets, and `onclose` -- our only recovery trigger until
+// now -- never fires: you sit in front of a frozen desktop until you think to
+// reload. So do not trust the socket, trust frames. Every layer here assumes the
+// one below it can silently stop (the server's own supervisor is this same idea,
+// one layer up).
+const STALE_MS = 3000;   // say so on screen -- the hud auto-hides, so "0fps" is not enough
+const DEAD_MS = 6000;    // stop waiting, throw the socket away and reconnect
+let lastFrame = performance.now();
+
+function sawFrame() {
+  lastFrame = performance.now();
+  staleBox.classList.remove('on');
+}
+
+setInterval(() => {
+  const gap = performance.now() - lastFrame;
+  if (gap < STALE_MS) return;
+  // readyState<=1: only OUR socket is worth killing. If it is already closing or
+  // closed, onclose is handling the reconnect and we just keep the notice up.
+  const dead = gap > DEAD_MS && socket && socket.readyState <= 1;
+  staleBox.classList.add('on');
+  staleMsg.textContent = dead ? 'reconnecting…' : `stream stalled ${(gap / 1000).toFixed(0)}s…`;
+  if (!dead) return;
+  report('no frames for ' + Math.round(gap) + 'ms -- forcing reconnect');
+  // Re-arm BEFORE closing: onclose reconnects 800ms later, and the gap would
+  // still read >DEAD_MS then -- we would kill the replacement socket on sight.
+  // A fresh connection is cheap: the server replays the cached codec and the
+  // last keyframe to every joining viewer, so recovery is one round trip.
+  lastFrame = performance.now();
+  socket.close();          // onclose already schedules connect()
+}, 500);
 
 // ---- input -----------------------------------------------------------------
 // Always send NORMALIZED 0..1 coords: the server multiplies by the real display
@@ -164,8 +207,15 @@ function mods(e) {
   return (e.altKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.metaKey ? 4 : 0) | (e.shiftKey ? 8 : 0);
 }
 
+// ⌘V/^V is handled locally by the paste listener below, so it must NOT be
+// forwarded: the remote would paste ITS clipboard, not ours. It must also not be
+// preventDefault()ed -- cancelling the keydown cancels the browser's paste event
+// with it, and the listener would never fire.
+const pasteCombo = e => (e.metaKey || e.ctrlKey) && (e.key === 'v' || e.key === 'V');
+
 canvas.addEventListener('keydown', e => {
   if (e.key === 'Escape' && controlling) { controlling = false; canvas.blur(); }
+  if (pasteCombo(e)) return;
   e.preventDefault();
   send('key', {
     event: 'keyDown', key: e.key, code: e.code,
@@ -173,8 +223,23 @@ canvas.addEventListener('keydown', e => {
   });
 });
 canvas.addEventListener('keyup', e => {
+  if (pasteCombo(e)) return;
   e.preventDefault();
   send('key', { event: 'keyUp', key: e.key, code: e.code, text: '', modifiers: mods(e) });
+});
+
+// Paste the LOCAL clipboard into the remote machine. The daemon types the whole
+// string in one op ("text" -> CGEventKeyboardSetUnicodeString), so a URL or a
+// password lands instantly instead of as dozens of synthetic keystrokes -- the
+// difference between usable and miserable on a phone. Bound on document, not the
+// canvas: a canvas is not editable, so the browser delivers paste to whatever
+// holds focus, and it bubbles to document either way.
+document.addEventListener('paste', e => {
+  const text = e.clipboardData && e.clipboardData.getData('text');
+  if (!text) return;
+  e.preventDefault();
+  send('paste', { text });
+  report('pasted ' + text.length + ' chars');   // length only -- never the content
 });
 
 // Cmd is swallowed by the local browser, so offer an explicit way to send it.
