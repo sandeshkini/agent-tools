@@ -13,7 +13,7 @@ const TOKEN = process.env.PUBLISH_TOKEN || ''       // required for POST/PUT pub
 const NTFY_URL = process.env.NTFY_URL || ''         // e.g. http://ntfy:80  (internal)
 const NTFY_TOPIC = process.env.NTFY_TOPIC || ''
 const NTFY_TOKEN = process.env.NTFY_TOKEN || ''
-const PUBLIC_BASE = process.env.PUBLIC_BASE || 'https://apps.kingdomofluna.com'
+const PUBLIC_BASE = process.env.PUBLIC_BASE || 'https://artifacts.kingdomofluna.com'   // apps.kingdomofluna.com is retired — orphaned 2026-08-15, nothing listens there
 // Pangolin resource for this hostname has SSO off (other systems need to push
 // without an interactive login) -- so this process must enforce on its own
 // that the push-only hostname can ONLY reach the token-gated write routes.
@@ -190,19 +190,15 @@ function legacyItemType(kind, name) {
   if (/\.html?$/i.test(name)) return 'html'
   return 'markdown'
 }
-// ── "which system published this" / "which computer sent it" — same sidecar-marker trick as
-// the `.type` react marker above: a plain-text file next to (apps: inside) the content, written
-// only if the publisher sent that field. Absent sidecar → the given fallback (dropped on disk /
-// published without declaring one — same bucket, no way to tell them apart after the fact).
-function legacySidecar(field, fallback) {
-  const legacyPath = (kind, name) => kind === 'app' ? path.join(ROOT, 'apps', name, `.${field}`) : path.join(ROOT, 'summaries', `${name}.${field}`)
-  const read = (kind, name) => { try { return fs.readFileSync(legacyPath(kind, name), 'utf8').trim() || fallback } catch { return fallback } }
-  return { path: legacyPath, read }
-}
-const sourceSidecar = legacySidecar('source', 'manual')
-const computerSidecar = legacySidecar('computer', 'unknown')
-const readLegacySource = sourceSidecar.read
-const readLegacyComputer = computerSidecar.read
+// ── "who published this" — same sidecar-marker trick as the `.type` react marker above: a
+// plain-text file next to (apps: inside) the content, written only if the publisher sent a
+// `source` string. One field, not two — it used to be split into source ("which system", e.g.
+// "cptr") + computer ("which machine", e.g. "aibo-linux"), but every real caller sends both
+// together 1:1, so mcp-tools now composes them into one string ("cptr@aibo-linux") before it
+// ever reaches here. Absent sidecar → 'manual' (dropped on disk / published without declaring
+// one — same bucket, no way to tell them apart after the fact).
+const legacySourcePath = (kind, name) => kind === 'app' ? path.join(ROOT, 'apps', name, '.source') : path.join(ROOT, 'summaries', `${name}.source`)
+const readLegacySource = (kind, name) => { try { return fs.readFileSync(legacySourcePath(kind, name), 'utf8').trim() || 'manual' } catch { return 'manual' } }
 
 // ── versioned artifacts (content/artifacts/<id>/meta.json + v1/, v2/, ...) ──────────
 // Additive: legacy `summaries/`+`apps/` content (and the /api/publish endpoint that writes
@@ -233,10 +229,10 @@ function allItems() {
   for (const [kind, sub] of [['summary', 'summaries'], ['app', 'apps']]) {
     const dir = path.join(ROOT, sub)
     for (const name of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
-      if (name.startsWith('.') || name.endsWith('.source') || name.endsWith('.computer')) continue   // dotfiles + sidecars aren't items
+      if (name.startsWith('.') || name.endsWith('.source')) continue   // dotfiles + source sidecars aren't items
       const st = fs.statSync(path.join(dir, name))
       const href = kind === 'app' ? `${BASE}/apps/${encodeURIComponent(name)}/` : `${BASE}/summaries/${encodeURIComponent(name)}`
-      out.push({ kind, name: pretty(name), href, type: legacyItemType(kind, name), source: readLegacySource(kind, name), computer: readLegacyComputer(kind, name), versions: 1, t: st.birthtimeMs || st.mtimeMs })
+      out.push({ kind, name: pretty(name), href, type: legacyItemType(kind, name), source: readLegacySource(kind, name), versions: 1, t: st.birthtimeMs || st.mtimeMs })
     }
   }
   for (const id of fs.existsSync(ARTIFACTS_DIR) ? fs.readdirSync(ARTIFACTS_DIR) : []) {
@@ -244,7 +240,7 @@ function allItems() {
     const meta = readMeta(id)
     if (!meta || !meta.versions?.length) continue
     const latest = meta.versions[meta.versions.length - 1]
-    out.push({ kind: 'artifact', id, name: meta.title, href: `${BASE}/a/${encodeURIComponent(id)}`, type: meta.type, source: meta.source || 'manual', computer: meta.computer || 'unknown', versions: meta.versions.length, t: latest.created })
+    out.push({ kind: 'artifact', id, name: meta.title, href: `${BASE}/a/${encodeURIComponent(id)}`, type: meta.type, source: meta.source || 'manual', versions: meta.versions.length, t: latest.created })
   }
   return out.sort((a, b) => b.t - a.t)   // most-recent first (an update bumps its artifact back to the top)
 }
@@ -260,42 +256,65 @@ function indexPage() {
     else groups.push({ label, items: [i] })
   }
   const sources = [...new Set(items.map(i => i.source || 'manual'))].sort()
-  const computers = [...new Set(items.map(i => i.computer || 'unknown'))].sort()
-  const row = i => `<a class=card data-type="${i.type}" data-source="${esc(i.source || 'manual')}" data-computer="${esc(i.computer || 'unknown')}" data-q="${esc(i.name.toLowerCase())}" href="${i.href}">${typeIconHtml(i.type)}` +
-    `<span class="grow"><div class=t>${esc(i.name)}</div><div class=d>${TYPE_NAME[i.type] || 'summary'} · ${esc(i.source || 'manual')} · ${esc(i.computer || 'unknown')} · ${esc(when(i.t))}${i.versions > 1 ? ` · v${i.versions}` : ''}</div></span>` +
+  const row = i => `<a class=card data-type="${i.type}" data-source="${esc(i.source || 'manual')}" data-q="${esc(i.name.toLowerCase())}" href="${i.href}">${typeIconHtml(i.type)}` +
+    `<span class="grow"><div class=t>${esc(i.name)}</div><div class=d>${TYPE_NAME[i.type] || 'summary'} · ${esc(i.source || 'manual')} · ${esc(when(i.t))}${i.versions > 1 ? ` · v${i.versions}` : ''}</div></span>` +
     `<span class=chev>›</span></a>`
   const groupsHtml = groups.map(g => `<div class=group><div class=day-hdr>${esc(g.label)}</div>${g.items.map(row).join('')}</div>`).join('')
-  const chipRow = (id, active, opts, label) => `<div class=filter-group><span class=filter-label>${label}</span>` +
-    `<div class="chips chiprow" id=${id}>${opts.map(o =>
-      `<button class="chip${o.v === active ? ' active' : ''}" data-filter="${esc(o.v)}">${esc(o.t)}</button>`
+  // Chips are just shortcuts into the ONE real filter mechanism — the search box. Clicking one
+  // writes/replaces a `type:x` or `src:x` token in the input and re-filters from that; typing
+  // the same token by hand does the same thing. No separate click-vs-type filter paths.
+  const chipRow = (id, prefix, opts, label) => `<div class=filter-group><span class=filter-label>${label}</span>` +
+    `<div class="chips chiprow" id=${id} data-prefix="${prefix}">${opts.map(o =>
+      `<button class="chip${o.v === 'all' ? ' active' : ''}" data-filter="${esc(o.v)}">${esc(o.t)}</button>`
     ).join('')}</div></div>`
   const filtersHtml = `<div class=filters>${
-    chipRow('chips', 'all', [{ v: 'all', t: 'All' }, ...types.map(t => ({ v: t, t: TYPE_LABEL[t].replace(/^[^ ]+ /, '') }))], 'Type')
+    chipRow('chips', 'type', [{ v: 'all', t: 'All' }, ...types.map(t => ({ v: t, t: TYPE_LABEL[t].replace(/^[^ ]+ /, '') }))], 'Type')
   }${
-    sources.length > 1 ? chipRow('sourceChips', 'all', [{ v: 'all', t: 'All' }, ...sources.map(s => ({ v: s, t: s }))], 'Source') : ''
-  }${
-    computers.length > 1 ? chipRow('computerChips', 'all', [{ v: 'all', t: 'All' }, ...computers.map(c => ({ v: c, t: c }))], 'Computer') : ''
+    sources.length > 1 ? chipRow('sourceChips', 'src', [{ v: 'all', t: 'All' }, ...sources.map(s => ({ v: s, t: s }))], 'Source') : ''
   }</div>`
   return page('Artifacts', `
 <div class=board-hdr><div><h1>Artifacts</h1><p class=sub>${items.length} published, newest first.</p></div>
-<input id=search class=search placeholder="Filter by name…" oninput="filterBoard()"></div>
+<input id=search class=search placeholder="Search, or type:svg / src:cptr…" oninput="filterBoard()"></div>
 ${filtersHtml}
 <div id=list>${groupsHtml || `<p class=empty>Nothing published yet.</p>`}</div>
 <p id=noresults class=empty style="display:none">No matches.</p>
 <script>
-function activeOf(id){ var row=document.getElementById(id); return row ? row.querySelector('.chip.active').dataset.filter : 'all'; }
+// Single source of truth: the search box text. "type:x" / "src:x" tokens narrow those facets,
+// everything else is free-text matched against the name. Chips read/write this same string —
+// there's exactly one filtering mechanism, chips are just a faster way to type a token.
+function parseQuery(q){
+  var type='all', src='all', free=[];
+  (q||'').split(/\\s+/).forEach(function(tok){
+    if(!tok) return;
+    var m;
+    if((m=/^type:(.+)$/i.exec(tok))) type=m[1];
+    else if((m=/^src:(.+)$/i.exec(tok))) src=m[1];
+    else free.push(tok);
+  });
+  return {type:type, src:src, free:free.join(' ').toLowerCase()};
+}
+function setToken(q, prefix, value){
+  var re=new RegExp('^'+prefix+':','i');
+  var tokens=(q||'').split(/\\s+/).filter(function(t){ return t && !re.test(t); });
+  if(value!=='all') tokens.push(prefix+':'+value);
+  return tokens.join(' ');
+}
+function syncChips(id, active){
+  var row=document.getElementById(id); if(!row) return;
+  row.querySelectorAll('.chip').forEach(function(x){ x.classList.toggle('active', x.dataset.filter===active); });
+}
 function filterBoard(){
-  var q=(document.getElementById('search').value||'').toLowerCase();
-  var activeType=activeOf('chips'), activeSource=activeOf('sourceChips'), activeComputer=activeOf('computerChips');
+  var parsed=parseQuery(document.getElementById('search').value);
+  syncChips('chips', parsed.type);
+  syncChips('sourceChips', parsed.src);
   var anyVisible=false;
   document.querySelectorAll('#list .group').forEach(function(g){
     var groupVisible=false;
     g.querySelectorAll('.card').forEach(function(c){
-      var okType = activeType==='all' || c.dataset.type===activeType;
-      var okSource = activeSource==='all' || c.dataset.source===activeSource;
-      var okComputer = activeComputer==='all' || c.dataset.computer===activeComputer;
-      var okQuery = !q || c.dataset.q.indexOf(q)>-1;
-      var show = okType&&okSource&&okComputer&&okQuery;
+      var okType = parsed.type==='all' || c.dataset.type===parsed.type;
+      var okSource = parsed.src==='all' || c.dataset.source===parsed.src;
+      var okQuery = !parsed.free || c.dataset.q.indexOf(parsed.free)>-1;
+      var show = okType&&okSource&&okQuery;
       c.style.display = show ? '' : 'none';
       if(show) groupVisible=true;
     });
@@ -307,8 +326,8 @@ function filterBoard(){
 document.querySelectorAll('.chiprow').forEach(function(row){
   row.addEventListener('click', function(e){
     var b=e.target.closest('.chip'); if(!b) return;
-    row.querySelectorAll('.chip').forEach(function(x){x.classList.remove('active')});
-    b.classList.add('active');
+    var input=document.getElementById('search');
+    input.value=setToken(input.value, row.dataset.prefix, b.dataset.filter).trim();
     filterBoard();
   });
 });

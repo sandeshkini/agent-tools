@@ -41,21 +41,25 @@ without a front door.
   content,                    required
   type,                       markdown (default) | html | svg | mermaid | code | react | app
   language,                   type:"code" only — e.g. "python", "bash"
-  source,                     optional — which SYSTEM published this (e.g. "cptr", "aibo-mac-pipeline")
-  computer                    optional — which MACHINE sent it (e.g. "aibo-linux", "aibo-mac")
+  source                      optional — who published this, free text (e.g. "cptr@aibo-linux")
 }
 ```
 `kind: "summary"|"app"` + `format: "md"|"html"` (the pre-type-system shape) still work on
 `/api/publish` for back-compat — `type` is just the preferred field now, covering 5 more kinds.
 
-`source`/`computer` are free text, shown on the board and filterable there once more than one
-distinct value exists (a single-value filter is hidden rather than shown with nothing to filter).
-Omit either and it shows as `manual`/`unknown` — that's also what all pre-existing content (from
-before these fields existed) backfills to. `update_artifact`/`PUT` accepts the same two fields to
-*change* an existing artifact's source/computer; omit to keep whatever it was set to at creation.
+`source` is one field, not split into "system" and "machine" — early on it was two (`source` +
+`computer`), but every real caller sends both together every time (1:1, never independently), so
+they'd have been two filters that always moved in lockstep — confusing, not useful. `mcp-tools`
+composes them (`SOURCE_LABEL@COMPUTER_LABEL`, e.g. `cptr@aibo-linux`) before it ever reaches this
+API; you can do the same (`"my-system@my-machine"`) or just send a plain string. Shown on the
+board and filterable there once more than one distinct value exists (a single-value filter is
+hidden rather than shown with nothing to filter). Omit it and it shows as `manual` — that's also
+what all pre-existing content (from before this field existed) backfills to. `update_artifact`/
+`PUT` accepts the same field to *change* an existing artifact's source; omit to keep whatever it
+was set to at creation.
 
-**Update body** (`PUT /api/artifacts/:id`): `{ content, language?, source?, computer? }` — type
-can't change on update.
+**Update body** (`PUT /api/artifacts/:id`): `{ content, language?, source? }` — type can't change
+on update.
 
 → one-shot: `{ ok: true, url: "/summaries/2026-08-10-my-title.md" }`
 → versioned: `{ ok: true, id: "my-title-a1b2c3", url: "/a/my-title-a1b2c3", version: 1 }`
@@ -76,11 +80,11 @@ no preview chrome — open the URL and it runs.
 | `PUSH_ONLY_HOST` | `push.artifacts.kingdomofluna.com` | requests on this Host header may ONLY reach the 3 write routes — everything else 404s |
 | `NTFY_URL` / `NTFY_TOPIC` / `NTFY_TOKEN` | — | publishing auto-pushes; **no-op if unset** |
 
-`mcp-tools` (the MCP server agents actually call through) has its own env for the two provenance
-fields — `SOURCE_LABEL` (default `cptr`) and `COMPUTER_LABEL` (no safe default; a Docker
-container's own hostname is meaningless, so this must be set per-machine in that machine's
-`agent-tools/.env` — see `machines.md` for canonical names) — stamped onto every artifact it
-publishes/creates automatically, so the calling agent never has to declare them itself.
+`mcp-tools` (the MCP server agents actually call through) composes the `source` field from two of
+its own env vars — `SOURCE_LABEL` (default `cptr`) and `COMPUTER_LABEL` (no safe default; a
+Docker container's own hostname is meaningless, so this must be set per-machine in that machine's
+`agent-tools/.env` — see `machines.md` for canonical names) — and stamps the result onto every
+artifact it publishes/creates automatically, so the calling agent never has to declare it itself.
 
 ## Data
 
@@ -93,6 +97,5 @@ Back it up yourself; it is the only copy.
 There's no hub/node split — every machine running this stack serves its own independent board.
 What actually happens today: multiple machines' agents (and the aibo-mac pipeline, hitting
 `push.artifacts.*` directly) all publish to the **same** board on aibo, tagging each publish with
-`source`/`computer` so the board stays legible about where everything came from. If a second
-machine ever needs its *own* board instead, that's a from-scratch feature, not something toggled
-on here.
+`source` so the board stays legible about where everything came from. If a second machine ever
+needs its *own* board instead, that's a from-scratch feature, not something toggled on here.

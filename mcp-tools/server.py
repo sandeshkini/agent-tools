@@ -11,15 +11,15 @@ work) — 2 for the artifacts board, 2 for versioned artifacts, 1 for phone push
       versioned publish (stable id, v1) → POSTs /api/artifacts, for content you'll revise later.
   • update_artifact(artifact_id, content, language="")
       pushes a new version (v2, v3, ...) to an existing id's SAME url — PUTs /api/artifacts/:id.
-  • list_artifacts() → newest-first text listing (name/type/version/id/source/computer/url), so
-      an agent can find an id before calling update_artifact.
+  • list_artifacts() → newest-first text listing (name/type/version/id/source/url), so an agent
+      can find an id before calling update_artifact.
   • notify(title, message, priority) → sends a phone push via ntfy, no page.
 
-Every artifact this server publishes/creates is auto-tagged with SOURCE_LABEL (which system —
-default "cptr") and COMPUTER_LABEL (which machine — no default, must be set per-deployment; see
-docker-compose.yml / install.sh) so the board can show/filter "who sent this" without the calling
-agent ever declaring it. Neither is an agent-facing tool parameter on purpose — it's a deployment
-fact, not a per-call judgment call.
+Every artifact this server publishes/creates is auto-tagged with a single `source` field — which
+system + which machine, e.g. "cptr@aibo-linux" — composed from SOURCE_LABEL + COMPUTER_LABEL env
+vars (no default on the latter; must be set per-deployment, see docker-compose.yml / install.sh)
+so the board can show/filter "who sent this" without the calling agent ever declaring it. Not an
+agent-facing tool parameter on purpose — it's a deployment fact, not a per-call judgment call.
 
 Served over Streamable HTTP at /mcp so every agent reaches it by URL:
   - containers (Claude Code / OpenCode via cptr) → http://mcp-tools:8000/mcp   (compose network)
@@ -40,18 +40,20 @@ _ARTIFACTS_BASE = ARTIFACTS_API.rsplit("/api/", 1)[0]
 ARTIFACTS_CREATE_API = f"{_ARTIFACTS_BASE}/api/artifacts"
 ARTIFACTS_LIST_API = f"{_ARTIFACTS_BASE}/api/list"
 PUBLISH_TOKEN = os.getenv("PUBLISH_TOKEN", "")
-# Stamped onto every artifact this instance publishes/creates, so the board can show/filter
-# "which system sent it" without trusting the calling LLM to type it correctly per-call. Set
-# once per deployment (this server is the single shared MCP endpoint every agent on the box
-# hits), not something the agent decides — override via env if this instance ever serves a
-# distinguishable different caller.
+# Stamped onto every artifact this instance publishes/creates, so the board can show/filter "who
+# sent this" without trusting the calling LLM to type it correctly per-call — a deployment fact,
+# not something the agent decides. ONE field on the wire (`source`), composed from two env vars
+# so it's easy to set per-machine without hardcoding a combined string everywhere:
+#   SOURCE_LABEL   which system (default "cptr")
+#   COMPUTER_LABEL which physical machine (e.g. "aibo-linux", "aibo-mac" — see machines.md for
+#                  canonical names). A container's own hostname is useless here (just its
+#                  container ID), so this MUST be set explicitly per machine in that machine's
+#                  own agent-tools/.env — no reliable auto-detect from inside Docker.
+# Result looks like "cptr@aibo-linux"; falls back to just SOURCE_LABEL if COMPUTER_LABEL was
+# never set anywhere for this deployment.
 SOURCE_LABEL = os.getenv("SOURCE_LABEL", "cptr")
-# Which physical machine this instance runs on (e.g. "aibo-linux", "aibo-mac" — see
-# ~/Documents/aibo-server/Infrastructure/machines.md for the canonical names). A container's own
-# hostname is useless here (just its container ID), so this MUST be set explicitly per machine in
-# that machine's own agent-tools/.env (COMPUTER_LABEL=...) — no reliable auto-detect from inside
-# Docker. Separate dimension from SOURCE_LABEL: multiple machines can all publish as source=cptr.
 COMPUTER_LABEL = os.getenv("COMPUTER_LABEL", "unknown")
+ORIGIN_LABEL = f"{SOURCE_LABEL}@{COMPUTER_LABEL}" if COMPUTER_LABEL != "unknown" else SOURCE_LABEL
 PUBLIC_BASE = os.getenv("PUBLIC_BASE", "http://localhost:8080")
 NTFY_BASE = os.getenv("NTFY_URL", "http://ntfy").rstrip("/")
 NTFY_TOPIC = os.getenv("NTFY_TOPIC", "aibo")
@@ -97,7 +99,7 @@ def publish_artifact(title: str, content_markdown: str, artifact_type: str = "ma
     """
     try:
         body = json.dumps({"title": title, "type": artifact_type, "language": language,
-                           "content": content_markdown, "source": SOURCE_LABEL, "computer": COMPUTER_LABEL}).encode()
+                           "content": content_markdown, "source": ORIGIN_LABEL}).encode()
         req = urllib.request.Request(ARTIFACTS_API, data=body, method="POST",
                                      headers={"Content-Type": "application/json",
                                               "X-Publish-Token": PUBLISH_TOKEN})
@@ -123,7 +125,7 @@ def create_artifact(title: str, content: str, artifact_type: str = "markdown", l
     """
     try:
         body = json.dumps({"title": title, "type": artifact_type, "language": language,
-                           "content": content, "source": SOURCE_LABEL, "computer": COMPUTER_LABEL}).encode()
+                           "content": content, "source": ORIGIN_LABEL}).encode()
         req = urllib.request.Request(ARTIFACTS_CREATE_API, data=body, method="POST",
                                      headers={"Content-Type": "application/json",
                                               "X-Publish-Token": PUBLISH_TOKEN})
@@ -170,8 +172,7 @@ def list_artifacts() -> str:
             tag = f" id={i['id']}" if i.get("id") else ""
             ver = f" (v{i['versions']})" if i.get("versions", 1) > 1 else ""
             src = f" src={i['source']}" if i.get("source") else ""
-            comp = f" @{i['computer']}" if i.get("computer") else ""
-            lines.append(f"- [{i.get('type')}] {i.get('name')}{ver}{tag}{src}{comp} -> {PUBLIC_BASE}{i.get('href')}")
+            lines.append(f"- [{i.get('type')}] {i.get('name')}{ver}{tag}{src} -> {PUBLIC_BASE}{i.get('href')}")
         return "\n".join(lines)
     except Exception as e:
         return f"list_artifacts failed: {e}"
