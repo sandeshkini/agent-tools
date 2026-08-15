@@ -32,7 +32,12 @@ NTFY_BASE = os.getenv("NTFY_URL", "http://ntfy").rstrip("/")
 NTFY_TOPIC = os.getenv("NTFY_TOPIC", "aibo")
 NTFY_TOKEN = os.getenv("NTFY_TOKEN", "")
 
-mcp = FastMCP("agent-tools", host="0.0.0.0", port=int(os.getenv("PORT", "8000")))
+# 0.0.0.0 is correct (and required) inside Docker, where only the compose port mapping
+# (127.0.0.1:8009:8000, loopback-only) actually exposes it. Running this directly on a host
+# (no Docker in front) needs the override — HOST=127.0.0.1 — or an unauthenticated MCP
+# endpoint (no per-caller auth; publish_artifact/notify hold the real tokens server-side) ends
+# up reachable from the whole LAN instead of just this machine.
+mcp = FastMCP("agent-tools", host=os.getenv("HOST", "0.0.0.0"), port=int(os.getenv("PORT", "8000")))
 
 
 @mcp.tool()
