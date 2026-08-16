@@ -47,8 +47,19 @@ import json
 import os
 import re
 import urllib.request
+from typing import Annotated, List, Literal, Optional
 
 from mcp.server.fastmcp import FastMCP
+from pydantic import BaseModel, Field
+
+# Verified live (2026-08-16) against a raw MCP `tools/list` call: this server's `:param` docstring
+# lines were NEVER reaching the wire schema — only the whole-function docstring shows up as the
+# tool-level `description`; every property in `inputSchema` came back as a bare `{title, type}`
+# with no per-field `description` at all, and an untyped `list` parameter (publish_files' `files`,
+# before this pass) came back as `{"items": {}}` — literally no shape for a calling model to go on.
+# `Annotated[T, Field(description=...)]` (and, for `files`, a real pydantic model) is what actually
+# lands in the schema other machines' agents see — verified the same way after this change. Keep
+# using it for every new/edited parameter here, not docstring `:param` prose alone.
 
 ARTIFACTS_API = os.getenv("ARTIFACTS_API", "http://artifacts:8080/api/publish")
 _ARTIFACTS_BASE = ARTIFACTS_API.rsplit("/api/", 1)[0]
@@ -86,9 +97,30 @@ NTFY_TOKEN = os.getenv("NTFY_TOKEN", "")
 # up reachable from the whole LAN instead of just this machine.
 mcp = FastMCP("agent-tools", host=os.getenv("HOST", "0.0.0.0"), port=int(os.getenv("PORT", "8000")))
 
+# Shared across publish_artifact/create_artifact — a real enum in the schema (not just prose)
+# means a calling model gets a closed value set instead of guessing at a free string.
+ArtifactType = Literal["markdown", "html", "svg", "mermaid", "code", "react"]
+ARTIFACT_TYPE_DESC = (
+    'markdown (default, rendered with the board\'s styling) | html (served as-authored, open '
+    'directly) | svg (inlined, with a view-source toggle) | mermaid (diagram source, rendered '
+    'client-side) | code (syntax-highlighted; pass `language`) | react (single JSX component, '
+    'must be named `App` — `function App(){...}` or `export default function App(){...}` — '
+    'written as a self-running index.html, no wrapper; recharts/lucide-react/d3 importable).'
+)
+
 
 @mcp.tool()
-def publish_artifact(title: str, content_markdown: str, artifact_type: str = "markdown", language: str = "") -> str:
+def publish_artifact(
+    title: Annotated[str, Field(description="Short title for the page.")],
+    content_markdown: Annotated[str, Field(description=(
+        'The page body — despite the param name, this holds whatever `artifact_type` calls for '
+        '(markdown text, an SVG document, Mermaid diagram source, a code snippet, or a React '
+        'component source), not necessarily markdown. Kept named `content_markdown` so existing '
+        'callers that only pass (title, content_markdown) keep working unchanged.'
+    ))],
+    artifact_type: Annotated[ArtifactType, Field(description=ARTIFACT_TYPE_DESC)] = "markdown",
+    language: Annotated[str, Field(description='For artifact_type="code" only — the language name (e.g. "python", "bash", "sql"). Ignored otherwise.')] = "",
+) -> str:
     """Push ANY kind of content — markdown notes, an HTML mockup, an SVG, a Mermaid diagram, a
     code snippet, or a React component — to a durable, shareable page on the artifacts board
     ($PUBLIC_BASE) for Sandesh to review later. This is how you hand him something to look at
@@ -103,24 +135,8 @@ def publish_artifact(title: str, content_markdown: str, artifact_type: str = "ma
     message and can pin any reply themselves. Prefer answering in chat; publish only when a durable,
     shareable link genuinely adds value, OR when he's not around to see the answer any other way.
 
-    :param title: Short title for the page.
-    :param content_markdown: The page body — despite the param name, this holds whatever
-        `artifact_type` calls for (markdown text, an SVG document, Mermaid diagram source, a code
-        snippet, or a React component source). Kept named `content_markdown` so existing callers
-        that only pass (title, content_markdown) keep working exactly as before — the default
-        `artifact_type` is still "markdown".
-    :param artifact_type: one of:
-        - "markdown" (default) — rendered with the board's markdown styling
-        - "html"    — served as-authored, open it directly
-        - "svg"     — inlined on the page, with a "view source" toggle
-        - "mermaid" — diagram source, rendered client-side
-        - "code"    — syntax-highlighted; pass the language name via `language` (e.g. "python")
-        - "react"   — a React component. Define it as `function App() { ... }` (or
-          `export default function App() { ... }` — either works) using only JSX + the `App` name;
-          it's written as a plain, self-running index.html — open the URL and it runs, nothing else
-          to do. No import needed for React itself (it's already in scope); a few extra libraries
-          (recharts, lucide-react, d3) are available to `import` if the component needs charts/icons.
-    :param language: for artifact_type="code" only — the language name (e.g. "python", "bash", "sql").
+    For anything binary, already on disk, or too large/opaque to safely retype as text (an image,
+    a PDF, a whole multi-file webpage export) use `publish_files` instead — see its own docstring.
     """
     try:
         body = json.dumps({"title": title, "type": artifact_type, "language": language,
@@ -135,19 +151,21 @@ def publish_artifact(title: str, content_markdown: str, artifact_type: str = "ma
 
 
 @mcp.tool()
-def create_artifact(title: str, content: str, artifact_type: str = "markdown", language: str = "") -> str:
+def create_artifact(
+    title: Annotated[str, Field(description="Short title for the page.")],
+    content: Annotated[str, Field(description=(
+        'markdown text / SVG document / Mermaid diagram source / code snippet / React component '
+        'source, depending on `artifact_type` — see publish_artifact for exactly what each type '
+        'means and (for "react") the `App`-naming rule.'
+    ))],
+    artifact_type: Annotated[ArtifactType, Field(description=ARTIFACT_TYPE_DESC)] = "markdown",
+    language: Annotated[str, Field(description='For artifact_type="code" only — the language name (e.g. "python"). Ignored otherwise.')] = "",
+) -> str:
     """Same idea as publish_artifact — any content type, for Sandesh to review, fires a phone
     push automatically — but with a stable id you can push new versions to later instead of
     littering the board with near-duplicate dated pages. Use this one instead of publish_artifact
     when you expect to revise this specific piece of content (call update_artifact with the
     returned id to push v2/v3/... to the SAME url, same phone-push behavior on every version).
-
-    :param title: Short title for the page.
-    :param content: markdown text / SVG document / Mermaid diagram source / code snippet / React
-        component source, depending on `artifact_type` — see publish_artifact's docstring for
-        exactly what each type means and (for "react") the `App`-naming rule.
-    :param artifact_type: markdown (default) | html | svg | mermaid | code | react.
-    :param language: for artifact_type="code" only — the language name (e.g. "python").
     """
     try:
         body = json.dumps({"title": title, "type": artifact_type, "language": language,
@@ -162,16 +180,15 @@ def create_artifact(title: str, content: str, artifact_type: str = "markdown", l
 
 
 @mcp.tool()
-def update_artifact(artifact_id: str, content: str, language: str = "") -> str:
+def update_artifact(
+    artifact_id: Annotated[str, Field(description="The id returned by create_artifact (or found via list_artifacts).")],
+    content: Annotated[str, Field(description="The new version's content — same shape as create_artifact's `content` param, for the artifact's existing type (type can't change on update).")],
+    language: Annotated[str, Field(description="For code-type artifacts only; omit to keep the artifact's current language.")] = "",
+) -> str:
     """Push a new version of an existing artifact (one created via create_artifact) to its
     SAME url — use this when refining something you already published, instead of creating a
     new artifact or using publish_artifact, so the board gets a navigable version history at one
     stable link rather than a pile of near-duplicates.
-
-    :param artifact_id: the id returned by create_artifact (or found via list_artifacts).
-    :param content: the new version's content — same shape as create_artifact's `content` param,
-        for the artifact's existing type (type can't change on update).
-    :param language: for code-type artifacts only; omit to keep the artifact's current language.
     """
     try:
         body = json.dumps({"content": content, "language": language}).encode()
@@ -205,8 +222,33 @@ def list_artifacts() -> str:
         return f"list_artifacts failed: {e}"
 
 
+class FileSpec(BaseModel):
+    """One file within a publish_files bundle."""
+    local_path: Annotated[str, Field(description=(
+        "Absolute path to the file, on the machine running THIS mcp-tools instance (not "
+        "necessarily where the calling agent's own session lives, though usually the same box). "
+        "On aibo-linux (Docker) only /tmp is visible — stage the file there first, e.g. "
+        "`cp report.pdf /tmp/`. On a host install (aibo-mac / aibo-dev / sage-agent — no Docker) "
+        "this runs as a normal process with full local filesystem access, any readable path works."
+    ))]
+    dest_path: Annotated[Optional[str], Field(default=None, description=(
+        'Relative filename/path for this file inside the published bundle (e.g. "img/logo.png"). '
+        'Defaults to the local file\'s own basename. Set to exactly "index.html" on one file to '
+        'make a multi-file bundle open directly as a webpage at the bundle\'s base URL.'
+    ))] = None
+
+
 @mcp.tool()
-def publish_files(title: str, files: list) -> str:
+def publish_files(
+    title: Annotated[str, Field(description="Short title for the artifact.")],
+    files: Annotated[List[FileSpec], Field(description=(
+        "One or more files to publish as a single bundle, min 1 item. A single file with no "
+        'index.html is served directly at its own URL. Include one file with dest_path='
+        '"index.html" to publish a whole webpage (HTML+CSS+JS+images, relative links preserved) '
+        "that opens at the bundle's base URL. Multiple files with no index.html get a plain "
+        "auto-generated listing page linking each one, so the bundle is never a dead end."
+    ))],
+) -> str:
     """Publish one or more local files as a single artifact — a whole webpage (HTML + CSS/JS/
     images, relative links preserved), a self-contained app bundle, or just one arbitrary file
     (PDF, image, zip, anything). Use this instead of publish_artifact/create_artifact whenever
@@ -216,19 +258,8 @@ def publish_files(title: str, files: list) -> str:
     large or opaque (a giant base64 blob typed out by an LLM mid-conversation is exactly the
     failure mode this avoids — it happened once, dropped a character, corrupted an image).
 
-    WHERE THE FILES MUST LIVE — differs per deployment:
-      - On aibo-linux this tool runs in Docker and can only see /tmp (read-only). Stage files
-        there first if they live elsewhere, e.g. `cp report.pdf /tmp/`.
-      - On a host install (aibo-mac / aibo-dev / sage-agent — no Docker) this runs as a normal
-        process with full local filesystem access — any path this machine can read works as-is.
-
-    :param title: Short title for the artifact.
-    :param files: list of {"local_path": "/abs/path/on/this/machine", "dest_path": "optional
-        relative/name.ext"}. dest_path defaults to the file's own basename. Give one file
-        dest_path "index.html" to make a multi-file bundle open directly as a webpage at its
-        base URL; a lone file (no index.html, only one entry) is served directly at its own URL.
-        With multiple files and no index.html, a plain listing page is generated automatically
-        so the bundle is still directly openable instead of a dead end.
+    Capped at 25MB per file, 100MB per bundle (call again with fewer/smaller files if you hit
+    that). See each field's own description below for exactly how local_path/dest_path resolve.
     """
     if not files:
         return "publish_files failed: no files given"
@@ -236,10 +267,8 @@ def publish_files(title: str, files: list) -> str:
         payload_files = []
         total = 0
         for f in files:
-            local_path = f.get("local_path") or f.get("localPath")
-            if not local_path:
-                return "publish_files failed: every file needs local_path"
-            dest_path = f.get("dest_path") or f.get("destPath") or os.path.basename(local_path)
+            local_path = f.local_path
+            dest_path = f.dest_path or os.path.basename(local_path)
             if ".." in dest_path.replace("\\", "/").split("/"):
                 return f"publish_files failed: dest_path '{dest_path}' may not contain '..'"
             try:
@@ -264,18 +293,21 @@ def publish_files(title: str, files: list) -> str:
         return f"publish_files failed: {e}"
 
 
+NotifyPriority = Literal["min", "low", "default", "high", "urgent"]
+
+
 @mcp.tool()
-def notify(title: str, message: str, priority: str = "default") -> str:
+def notify(
+    title: Annotated[str, Field(description="Short notification title.")],
+    message: Annotated[str, Field(description="The notification body.")],
+    priority: Annotated[NotifyPriority, Field(description="Urgency shown in the ntfy push — min/low/default/high/urgent.")] = "default",
+) -> str:
     """Send a push notification to the user's phone (ntfy) — a quick custom heads-up / alert, no page.
 
     WHEN TO USE: for a genuinely out-of-band alert the user should see while away — e.g. "build done, 3
     tests failing", or the result of a scheduled/autonomous task. You do NOT need this just to say a turn
     finished or that you need input: the hub ALREADY auto-pushes "done" and "needs input" for every turn.
     Use only for notify-worthy custom messages the automatic pushes don't cover.
-
-    :param title: Short notification title.
-    :param message: The notification body.
-    :param priority: one of min, low, default, high, urgent.
     """
     try:
         payload = {"topic": NTFY_TOPIC, "title": title, "message": message}

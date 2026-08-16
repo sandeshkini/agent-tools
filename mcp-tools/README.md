@@ -19,7 +19,9 @@ Define a tool once here → every agent gets it, no per-adapter work.
     through an agent's own text generation, so it can't get corrupted the way a hand-typed base64
     blob can (see `Services/artifacts.md` for the incident that motivated this). `local_path` must
     resolve on *this* deployment: the Docker instance mounts `/tmp:/tmp:ro` only (stage files
-    there first), a host install (`install.sh`) has full local filesystem access already.
+    there first), a host install (`install.sh`) has full local filesystem access already. `files`
+    is a real typed schema (`FileSpec[]` — `local_path` required, `dest_path` optional), not a
+    bare untyped list — see "Schema quality" below for why that distinction was worth fixing.
   - `notify(title, message, priority)` — bare ntfy phone push, no page.
 - Runs as the `mcp-tools` compose service (networks: `default` + `apps`; host port `127.0.0.1:8009`).
 - Creds/config via env (compose `.env`): `PUBLISH_TOKEN`, `NTFY_URL`, `NTFY_TOPIC`, `NTFY_TOKEN`,
@@ -30,6 +32,25 @@ Define a tool once here → every agent gets it, no per-adapter work.
 ## Add a tool
 Add an `@mcp.tool()` function → `docker compose up -d --build mcp-tools`. Every agent gets it on
 its next fresh MCP connection (a new session) — no cptr restart needed, cptr doesn't mediate this.
+
+## Schema quality — use `Annotated[T, Field(description=...)]`, not `:param` docstring lines
+
+Verified live (2026-08-16) with a raw MCP `tools/list` call against this server: `:param` lines
+in a tool's docstring do **not** reach the wire schema at all — only the whole-function docstring
+shows up as the tool-level `description` string. Every parameter's `inputSchema` property came
+back as a bare `{title, type}` with no `description`, and an untyped `files: list` parameter came
+back as `{"items": {}}` — no shape whatsoever for a calling model to go on beyond prose it may or
+may not read closely.
+
+The fix, applied to every tool here: annotate each parameter with
+`Annotated[T, Field(description="...")]`, use `Literal[...]` for closed value sets
+(`artifact_type`, `priority` — these now show up as real JSON Schema `enum` arrays), and a
+`pydantic.BaseModel` for structured parameters (`publish_files`' `files: List[FileSpec]` — each
+field gets its own description, required/optional is explicit, and it resolves as a proper
+`$ref`'d object schema instead of an opaque array). Confirmed via the same raw `tools/list` probe
+after the change, plus a live `tools/call`. Keep using this pattern for anything added here —
+`:param` docstring prose is still worth keeping for the humans/models reading the tool
+description as a whole, but it is not a substitute for the schema itself.
 
 ## Wiring (how each agent reaches it)
 Each CLI agent gets this server from its **own native MCP config** — not from cptr, which does
