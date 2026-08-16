@@ -226,6 +226,20 @@ ${n > 1 ? `<a href="${BASE}/a/${encodeURIComponent(id)}/v/${n - 1}">← v${n - 1
 ${n < total ? `<a href="${BASE}/a/${encodeURIComponent(id)}/v/${n + 1}">v${n + 1} →</a>` : '<span></span>'}
 </div>`
 
+// ── "what to actually link to" for an app-kind bundle — added 2026-08-16 alongside
+// publish_files. Every PRE-EXISTING app/react bundle (from /api/publish) always writes an
+// index.html, so `${BASE}/apps/<name>/` (defaulting to index.html, see the GET /apps/ route)
+// was always correct. publish_files broke that assumption: a single-file bundle with no
+// index.html (e.g. one PDF/image) deliberately does NOT get one -- the API response points
+// straight at the file -- but the board's own index page didn't know that and kept linking to
+// the bare directory, which 404s (found live: the artifact's own returned URL worked, the
+// board-index link to the same thing didn't). Fixed with the same sidecar-marker trick as
+// `.type`/`.source`: publish-files writes a `.entry` file with the bundle-relative path to
+// actually open (empty string means "index.html, the directory URL is fine as-is"). Bundles
+// without this sidecar (all the pre-existing ones) fall back to the old always-correct-for-them
+// behavior.
+const entryPath = name => { try { return fs.readFileSync(path.join(ROOT, 'apps', name, '.entry'), 'utf8').trim() } catch { return '' } }
+
 function allItems() {
   const out = []
   for (const [kind, sub] of [['summary', 'summaries'], ['app', 'apps']]) {
@@ -233,7 +247,8 @@ function allItems() {
     for (const name of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
       if (name.startsWith('.') || name.endsWith('.source')) continue   // dotfiles + source sidecars aren't items
       const st = fs.statSync(path.join(dir, name))
-      const href = kind === 'app' ? `${BASE}/apps/${encodeURIComponent(name)}/` : `${BASE}/summaries/${encodeURIComponent(name)}`
+      const entry = kind === 'app' ? entryPath(name) : ''
+      const href = kind === 'app' ? `${BASE}/apps/${encodeURIComponent(name)}/${entry ? encodeURI(entry) : ''}` : `${BASE}/summaries/${encodeURIComponent(name)}`
       out.push({ kind, name: pretty(name), href, type: legacyItemType(kind, name), source: readLegacySource(kind, name), versions: 1, t: st.birthtimeMs || st.mtimeMs })
     }
   }
@@ -549,7 +564,11 @@ const server = http.createServer(async (req, res) => {
       if (source) fs.writeFileSync(path.join(dir, '.source'), source)
       // hasIndex (supplied or synthesized) → base URL serves it via the existing default-to-
       // index.html rule below. Otherwise there's exactly one file (see the synthesize branch
-      // above) — link straight to it.
+      // above) — link straight to it. `.entry` sidecar tells the board index page (allItems(),
+      // above) the same thing, so the "open" link shown there isn't a dead end for single-file
+      // bundles -- found live: the API's own returned URL worked, the board-index link to the
+      // same bundle 404'd, because it always assumed an index.html existed.
+      fs.writeFileSync(path.join(dir, '.entry'), hasIndex ? '' : written[0])
       const rel = hasIndex ? `/apps/${base}/` : `/apps/${base}/${encodeURI(written[0])}`
       notifyPublish(title || base, BASE + rel)
       return send(res, 200, JSON.stringify({ ok: true, url: BASE + rel, files: written.length }), 'application/json')
