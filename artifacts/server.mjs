@@ -23,6 +23,11 @@ const PUSH_ONLY_HOST = process.env.PUSH_ONLY_HOST || 'push.artifacts.kingdomoflu
 const PUSH_ONLY_ROUTES = [
   ['POST', '/api/publish'],
   ['POST', '/api/artifacts'],
+  // GET /api/list — added 2026-08-16 so list_artifacts works from machines (aibo-mac, aibo-dev)
+  // that can only reach the artifacts board through this no-SSO hostname, not aibo's internal
+  // docker network. Still token-gated below (same requireToken() as the write routes) -- this
+  // host stays "nothing without the token", not "read is public here now".
+  ['GET', '/api/list'],
 ]
 
 const ARTIFACTS_DIR = path.join(ROOT, 'artifacts')
@@ -485,6 +490,10 @@ const server = http.createServer(async (req, res) => {
   // ── JSON list API ── GET /api/list → { items:[{kind, name, href, type, source, computer, versions, created}] }
   // (newest first). Powers the OWUI native Artifacts panel + list_artifacts MCP tool.
   if (url === '/api/list') {
+    // On the push-only host this is a listed exception (see PUSH_ONLY_ROUTES above) but still
+    // requires the token -- everywhere else (SSO'd host, internal container-to-container calls)
+    // is unchanged, no token needed, same as before.
+    if (reqHost === PUSH_ONLY_HOST && !requireToken(req, res)) return
     const items = allItems().map(i => ({ kind: i.kind, id: i.id, name: i.name, href: i.href, type: i.type, source: i.source, computer: i.computer, versions: i.versions, created: i.t }))
     return send(res, 200, JSON.stringify({ items }), 'application/json')
   }

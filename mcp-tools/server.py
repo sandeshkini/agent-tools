@@ -177,7 +177,8 @@ def list_artifacts() -> str:
     """List published artifacts (newest first, name/type/version/id/url) — use this to find an
     artifact's id before calling update_artifact, or to check what's already on the board."""
     try:
-        resp = json.loads(urllib.request.urlopen(ARTIFACTS_LIST_API, timeout=15).read().decode() or "{}")
+        req = urllib.request.Request(ARTIFACTS_LIST_API, headers={"X-Publish-Token": PUBLISH_TOKEN})
+        resp = json.loads(urllib.request.urlopen(req, timeout=15).read().decode() or "{}")
         items = resp.get("items", [])
         if not items:
             return "No artifacts published yet."
