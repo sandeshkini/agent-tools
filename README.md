@@ -14,25 +14,26 @@ is the primary agent UI now and consumes these.
 
 ### Host daemon (`./install.sh`, not Docker)
 
-Needs direct hardware access (inject input, capture the screen), so it runs on
-the host via launchd (macOS) / systemd (Linux), not in a container. Lets a cptr
-tab **be** the whole workstation — see and control the machine's real desktop
-from any device, browser-only, no native app on the viewing end.
+Needs direct hardware access, so it runs on the host via launchd (macOS) /
+systemd (Linux), not in a container.
 
 | Tool | What | Install |
 |---|---|---|
-| `cptr-input` | desktop streaming (headless Chrome + H.264, `cptr-input/desktop/`) + the cross-platform input daemon that drives it (mouse/keyboard over a socket, `cptr-input/`) | `cptr-input/install.sh` (daemon); `desktop/desktop_server.py` run under launchd/systemd (streaming) |
 | `cptr-watchdog` | periodic self-heal for cptr's own service — re-registers it if the launchd job/systemd unit was deregistered entirely (not just crashed; `KeepAlive`/`Restart=always` don't cover that), restarts it if registered but unhealthy | `cptr-watchdog/install.sh` |
 
-See `cptr-input/README.md` and `cptr-watchdog/README.md`. Both carry per-machine
-service state (paths/ports differ per host), so the installers generate the
-launchd/systemd unit rather than shipping one checked in.
+See `cptr-watchdog/README.md` — carries per-machine service state (paths/ports
+differ per host), so the installer generates the launchd/systemd unit rather
+than shipping one checked in.
 
 > A related host-level fix — `loopback-shim`, which patches an IPv4/IPv6 quirk in
-> **cptr's own** built-in chrome-mode viewer (unrelated to the `cptr-input`
-> streaming tool above) — lives with the rest of the cptr hub docs at
-> `~/Documents/aibo-server/Services/cptr/host-fixes/loopback-shim/` instead of
-> here, since it fixes cptr itself rather than adding a shared tool.
+> **cptr's own** built-in chrome-mode viewer — lives with the rest of the cptr
+> hub docs at `~/Documents/aibo-server/Services/cptr/host-fixes/loopback-shim/`
+> instead of here, since it fixes cptr itself rather than adding a shared tool.
+
+> **`cptr-input` (desktop streaming + input-injection daemon) was removed
+> 2026-08-15.** RustDesk already covers full remote-desktop access; the extra
+> browser-streaming layer wasn't worth maintaining. Removed from this repo and
+> uninstalled from every host that ran it (`aibo-mac`).
 
 ## Run
 ```bash
