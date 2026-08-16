@@ -8,9 +8,9 @@ is the primary agent UI now and consumes these.
 
 | Service | Where | URL / port |
 |---|---|---|
-| `artifacts` | board (publish `.md`/`.html`) | `apps.kingdomofluna.com/artifacts` |
+| `artifacts` | board (publish any content type, versioned) | `artifacts.kingdomofluna.com` (write: `push.artifacts.kingdomofluna.com`) |
 | `ntfy` | phone push bus | `ntfy.kingdomofluna.com`, host `:8095` |
-| `mcp-tools` | shared MCP: `publish_artifact` + `notify` | `127.0.0.1:8009/mcp` (cptr consumes this) |
+| `mcp-tools` | shared MCP: `publish_artifact`/`create_artifact`/`update_artifact`/`list_artifacts`/`notify` | `127.0.0.1:8009/mcp` (cptr consumes this) |
 
 ### Host daemon (`./install.sh`, not Docker)
 
@@ -25,15 +25,19 @@ See `cptr-watchdog/README.md` — carries per-machine service state (paths/ports
 differ per host), so the installer generates the launchd/systemd unit rather
 than shipping one checked in.
 
-> A related host-level fix — `loopback-shim`, which patches an IPv4/IPv6 quirk in
-> **cptr's own** built-in chrome-mode viewer — lives with the rest of the cptr
-> hub docs at `~/Documents/aibo-server/Services/cptr/host-fixes/loopback-shim/`
-> instead of here, since it fixes cptr itself rather than adding a shared tool.
+> `loopback-shim`, a host-level fix for an IPv4/IPv6 quirk in **cptr's own**
+> built-in chrome-mode viewer, lives with the rest of the cptr hub docs at
+> `~/Documents/aibo-server/Services/cptr/host-fixes/loopback-shim/` instead of
+> here, since it fixes cptr itself rather than adding a shared tool.
 
-> **`cptr-input` (desktop streaming + input-injection daemon) was removed
-> 2026-08-15.** RustDesk already covers full remote-desktop access; the extra
-> browser-streaming layer wasn't worth maintaining. Removed from this repo and
-> uninstalled from every host that ran it (`aibo-mac`).
+> **`cptr-input`** (desktop streaming + input-injection daemon) was removed
+> 2026-08-16 — decided to stick with RustDesk for all computer-input/remote
+> desktop needs instead. Source deleted from this repo; the `com.sandesh.
+> cptr-input`/`com.sandesh.agent-desktop` launchd jobs on aibo-mac and aibo-dev
+> (it ran on both, not just aibo-mac) need manual removal directly on those
+> machines — no remote access to either from here to confirm or do it. If you
+> find a stray reference elsewhere, it's stale; RustDesk is the one true answer
+> now (see `Infrastructure/rustdesk.md` in `aibo-server`).
 
 ## Run
 ```bash
