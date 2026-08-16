@@ -107,6 +107,31 @@ Verify: `claude mcp list` / `opencode mcp list` → `cua-driver: connected` in b
 real `get_desktop_state` call returning an actual PNG (not just a "connected" status), same
 verification bar as `mcp-tools`.
 
+## Permission mode / browser-profile grant — launch-time flags only, not runtime-configurable
+
+`--permission-mode <standard|bounded|unrestricted>` and `--grant existing-profile` (the latter
+pre-authorizes an already-logged-in Chrome/Edge profile for browser automation) are **`serve`-only
+CLI flags** — confirmed via `cua-driver serve --help`, which states outright: *"The mode is fixed
+for the daemon lifetime and cannot be changed by a tool call."*
+
+Confirmed by checking both directions on aibo-dev (2026-08-16):
+- `get_config` returns only `agent_cursor`, `experimental_pip*`, `max_image_dimension`, `platform`,
+  `source_sha`, `version` — no `permission_mode`/`existing-profile`/grant key of any kind.
+- `set_config`'s schema only accepts `experimental_pip`, `experimental_pip_geometry`,
+  `max_image_dimension`, or a generic `{key, value}` pair for those same fields — nothing that
+  reaches authorization/grant state.
+
+So this genuinely can't be flipped mid-session from inside a tool call, by either agent — it's not
+a missing tool, it's how the daemon is designed (permission mode is meant to be a deployment
+decision, set once at process start, not something a running agent can escalate for itself).
+
+**To actually use `existing-profile` (or a non-default `--permission-mode`), it has to go on the
+daemon's own launch args**, i.e. edit the `launchd` plist's `ProgramArguments` (§ Autostart above)
+to add the flag, then `launchctl bootout` + `bootstrap` (not `kickstart` — same plist-edit gotcha
+documented elsewhere in this repo, `kickstart` restarts the process but keeps serving the old
+launch args). No machine in this fleet currently sets either flag — all three run `serve` with no
+extra args, i.e. `standard` permission mode, no pre-authorized browser profile.
+
 ## Guardrails
 
 No destructive-action guardrail exists for `cua-driver` (unlike Hermes-era `deny-destructive.py`,
