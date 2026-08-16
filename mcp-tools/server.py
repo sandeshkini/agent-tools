@@ -3,6 +3,12 @@
 agent-tools — one shared MCP server for every agent that reaches this machine (cptr's Claude
 Code + OpenCode; formerly Hermes too, retired 2026-08-11).
 
+Core job: give any agent here two ways to reach Sandesh when he isn't actively watching the
+chat — **push a page** (any content type: markdown/html/svg/mermaid/code/react) for him to
+review whenever he next checks his phone, or **push a bare alert** with no page at all.
+Publishing a page always fires a phone notification too — he never has to be told separately
+that something's ready, the tap-to-open link is already in the push.
+
 Exposes 5 tools from this one place (add a tool here → every agent gets it, no per-adapter
 work) — 2 for the artifacts board, 2 for versioned artifacts, 1 for phone push:
   • publish_artifact(title, content_markdown, artifact_type="markdown", language="")
@@ -13,7 +19,9 @@ work) — 2 for the artifacts board, 2 for versioned artifacts, 1 for phone push
       pushes a new version (v2, v3, ...) to an existing id's SAME url — PUTs /api/artifacts/:id.
   • list_artifacts() → newest-first text listing (name/type/version/id/source/url), so an agent
       can find an id before calling update_artifact.
-  • notify(title, message, priority) → sends a phone push via ntfy, no page.
+  • notify(title, message, priority) → sends a phone push via ntfy, no page — for a bare alert
+      that doesn't need a page (e.g. "build finished, 3 tests failing"), separate from the
+      auto-push the two publish tools above already give you for free.
 
 Every artifact this server publishes/creates is auto-tagged with a single `source` field — which
 system + which machine, e.g. "cptr@aibo-linux" — composed from SOURCE_LABEL + COMPUTER_LABEL env
@@ -69,14 +77,19 @@ mcp = FastMCP("agent-tools", host=os.getenv("HOST", "0.0.0.0"), port=int(os.gete
 
 @mcp.tool()
 def publish_artifact(title: str, content_markdown: str, artifact_type: str = "markdown", language: str = "") -> str:
-    """Publish content as a shareable page on the artifacts board ($PUBLIC_BASE/artifacts)
-    and send a phone notification. Returns the page URL.
+    """Push ANY kind of content — markdown notes, an HTML mockup, an SVG, a Mermaid diagram, a
+    code snippet, or a React component — to a durable, shareable page on the artifacts board
+    ($PUBLIC_BASE) for Sandesh to review later. This is how you hand him something to look at
+    when he isn't watching right now: publishing automatically fires a phone push via ntfy (tap
+    → opens straight to the page), so you never need to separately tell him it's ready — that
+    happens on its own the moment this call succeeds. Returns the page URL.
 
     WHEN TO USE: only when the user EXPLICITLY asks you to publish / share / save a page, OR for
     autonomous / scheduled work where no human is watching to do it themselves (e.g. a scheduled daily
-    brief). For an ordinary reply do NOT auto-publish — the user has a built-in "Publish" button on every
+    brief, or a long task finishing while he's away and you want him to review the result). For an
+    ordinary reply do NOT auto-publish — the user has a built-in "Publish" button on every
     message and can pin any reply themselves. Prefer answering in chat; publish only when a durable,
-    shareable link genuinely adds value.
+    shareable link genuinely adds value, OR when he's not around to see the answer any other way.
 
     :param title: Short title for the page.
     :param content_markdown: The page body — despite the param name, this holds whatever
@@ -111,10 +124,11 @@ def publish_artifact(title: str, content_markdown: str, artifact_type: str = "ma
 
 @mcp.tool()
 def create_artifact(title: str, content: str, artifact_type: str = "markdown", language: str = "") -> str:
-    """Create a new artifact with a stable id, on the artifacts board. Use this instead of
-    publish_artifact when you expect to revise this specific piece of content later — call
-    update_artifact with the returned id to push a new version to the SAME url, instead of
-    publish_artifact leaving a trail of near-duplicate dated pages on the board.
+    """Same idea as publish_artifact — any content type, for Sandesh to review, fires a phone
+    push automatically — but with a stable id you can push new versions to later instead of
+    littering the board with near-duplicate dated pages. Use this one instead of publish_artifact
+    when you expect to revise this specific piece of content (call update_artifact with the
+    returned id to push v2/v3/... to the SAME url, same phone-push behavior on every version).
 
     :param title: Short title for the page.
     :param content: markdown text / SVG document / Mermaid diagram source / code snippet / React
