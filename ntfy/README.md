@@ -1,16 +1,17 @@
 # ntfy — the notification bus
 
-Push notifications for the hub: **an agent finished**, **an agent needs your input**, **an artifact
-was published**. Delivered to the ntfy app on your phone.
+Push notifications: **an agent finished**, **an agent needs your input**, **an artifact was
+published**. Delivered to the ntfy app on your phone.
 
-Hub-only (`profiles: ["hub"]`) — one bus for the whole fleet. Nodes push to the hub's ntfy rather
-than running their own, so all notifications land in one place regardless of which machine did the work.
+One bus, runs on aibo only — every machine (aibo-mac, aibo-dev, sage-agent) pushes to this same
+instance rather than running its own, so all notifications land in one place regardless of which
+machine did the work. (There's no actual hub/node profile split in the compose file — just one
+shared service every machine's `mcp-tools`/agent points at, same pattern as the artifacts board.)
 
-## Why ntfy and not web push
+## Why ntfy and not browser push
 
-Open WebUI has **no web-push support at all** — no VAPID, no `pushManager`, and `+layout.svelte`
-actively *unregisters* service workers. So browser push isn't an available fallback; ntfy is the
-correct delivery channel, not a workaround.
+Notifications need to land even when no browser tab is open (cptr's chat isn't watched 24/7),
+so a dedicated push service is the right tool regardless of what any given web frontend supports.
 
 `NTFY_UPSTREAM_BASE_URL=https://ntfy.sh` matters on iOS: self-hosted ntfy can't wake an iPhone on
 its own, so it relays through ntfy.sh for instant delivery. Only the topic name transits the relay
@@ -38,11 +39,11 @@ docker exec -it ntfy ntfy access <user> <topic> rw
 | Env | Default | Notes |
 |---|---|---|
 | `NTFY_PUBLIC_URL` | `https://ntfy.kingdomofluna.com` | what the server advertises to clients |
-| `NTFY_DOMAIN` | `ntfy.kingdomofluna.com` | Traefik `Host()` rule |
+| `NTFY_DOMAIN` | `ntfy.kingdomofluna.com` | Pangolin resource hostname (`localhost:8095` target — direct port, no Traefik, removed 2026-08-15) |
 | `NTFY_PORT` | `8095` | host + LAN access |
 | `NTFY_DATA` | `./ntfy/data` | `lib/` (user.db) + `cache/` |
 | `NTFY_URL` | `http://ntfy` | **internal** URL other containers push to (no public round-trip) |
-| `NTFY_TOPIC` / `NTFY_TOKEN` | — | what agent-hub services publish to |
+| `NTFY_TOPIC` / `NTFY_TOKEN` | — | what `mcp-tools`' `notify()` and every publish auto-push use |
 
 ## Publishing from a service
 

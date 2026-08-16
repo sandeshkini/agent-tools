@@ -47,11 +47,7 @@ services:
     volumes:
       - ${NTFY_DATA:-./ntfy/data}/lib:/var/lib/ntfy
       - ${NTFY_DATA:-./ntfy/data}/cache:/var/cache/ntfy
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.ntfy.rule=Host(`${NTFY_DOMAIN:-ntfy.kingdomofluna.com}`)"
-      - "traefik.http.services.ntfy.loadbalancer.server.port=80"
-    networks: [default, apps]
+    networks: [default, apps]   # Traefik labels removed 2026-08-16 — dead weight, Pangolin has targeted localhost:8095 directly since Traefik was removed 2026-08-15
 
   mcp-tools:
     build: ./mcp-tools
