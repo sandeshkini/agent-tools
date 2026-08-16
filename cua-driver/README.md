@@ -129,8 +129,28 @@ decision, set once at process start, not something a running agent can escalate 
 daemon's own launch args**, i.e. edit the `launchd` plist's `ProgramArguments` (§ Autostart above)
 to add the flag, then `launchctl bootout` + `bootstrap` (not `kickstart` — same plist-edit gotcha
 documented elsewhere in this repo, `kickstart` restarts the process but keeps serving the old
-launch args). No machine in this fleet currently sets either flag — all three run `serve` with no
-extra args, i.e. `standard` permission mode, no pre-authorized browser profile.
+launch args).
+
+### aibo-dev: `--grant existing-profile` enabled (2026-08-16)
+
+`com.trycua.cua-driver.plist`'s `ProgramArguments` now reads
+`[cua-driver, serve, --grant, existing-profile]`. Applied via `bootout`+`bootstrap` (not
+`kickstart`), confirmed the new args are what's actually running
+(`launchctl print ... | grep -A5 arguments`), and confirmed both TCC grants (Accessibility, Screen
+Recording) survived the restart.
+
+**Verified the grant is live, not just present in the launch args**, by calling `browser_prepare`
+with `strategy.kind=existing_profile` against a real Google Chrome pid on this machine. The
+response was `browser_wrong_target_refused: "the approved Google Chrome window has no exact New
+Tab button"` — a **target-matching** refusal (the specific window checked was a menu-bar extra,
+not an actual browser window), not a **permission-mode** refusal. Before this grant, the same call
+would refuse at the permission-mode check itself (`standard requires an explicit --grant
+existing-profile launch grant`) before ever reaching target-matching logic — so getting a
+target-matching refusal instead is proof the grant took effect, even without a real foreground
+Chrome window open at test time to complete the full attach.
+
+Other machines (aibo-mac, aibo-linux's separate cua-driver setup) still run plain `serve`, no
+extra args — `standard` permission mode, no pre-authorized browser profile. Not yet applied there.
 
 ## Guardrails
 
@@ -141,11 +161,11 @@ launch control, same reasoning as aibo-mac's README section on it.
 
 ## Per-machine status
 
-| Machine | Version | Autostart | Accessibility | Screen Recording | MCP (Claude/OpenCode) |
-|---|---|---|---|---|---|
-| aibo-mac | 0.19.3 (2026-08-14) | `launchd` KeepAlive | granted | granted | both connected |
-| aibo-dev | 0.20.0 (2026-08-16) | `launchd` KeepAlive | granted | granted | both connected |
-| aibo-linux | not installed | — | — | — | — |
+| Machine | Version | Autostart | Accessibility | Screen Recording | Existing-profile grant | MCP (Claude/OpenCode) |
+|---|---|---|---|---|---|---|
+| aibo-mac | 0.19.3 (2026-08-14) | `launchd` KeepAlive | granted | granted | no (`standard` mode) | both connected |
+| aibo-dev | 0.20.0 (2026-08-16) | `launchd` KeepAlive | granted | granted | **yes (2026-08-16)** | both connected |
+| aibo-linux | not installed | — | — | — | — | — |
 
 aibo-linux doesn't need this — it already has `cua-driver` set up differently there (see
 `../../aibo-server/Services/cptr/README.md` § MCP integrations; that install predates this repo
