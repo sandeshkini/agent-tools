@@ -20,10 +20,12 @@ systemd (Linux), not in a container.
 | Tool | What | Install |
 |---|---|---|
 | `cptr-watchdog` | periodic self-heal for cptr's own service — re-registers it if the launchd job/systemd unit was deregistered entirely (not just crashed; `KeepAlive`/`Restart=always` don't cover that), restarts it if registered but unhealthy | `cptr-watchdog/install.sh` |
+| `mcp-tools` (host mode) | same `publish_artifact`/`notify` MCP as the Docker service above, for a machine with no Docker (thin client hitting aibo's shared board/bus over the public URLs, not the compose network) | `mcp-tools/install.sh` |
+| `cua-driver` | third-party computer-use MCP binary (not vendored here) — 56 tools: click/type/screenshot/launch-apps/drag/record. Install + per-machine status documented, not code | `cua-driver/README.md` |
 
-See `cptr-watchdog/README.md` — carries per-machine service state (paths/ports
-differ per host), so the installer generates the launchd/systemd unit rather
-than shipping one checked in.
+See `cptr-watchdog/README.md`/`mcp-tools/README.md`/`cua-driver/README.md` — all carry
+per-machine service state (paths/ports/versions differ per host), so installers generate
+the launchd/systemd unit rather than shipping one checked in.
 
 > `loopback-shim`, a host-level fix for an IPv4/IPv6 quirk in **cptr's own**
 > built-in chrome-mode viewer, lives with the rest of the cptr hub docs at
@@ -32,12 +34,13 @@ than shipping one checked in.
 
 > **`cptr-input`** (desktop streaming + input-injection daemon) was removed
 > 2026-08-16 — decided to stick with RustDesk for all computer-input/remote
-> desktop needs instead. Source deleted from this repo; the `com.sandesh.
-> cptr-input`/`com.sandesh.agent-desktop` launchd jobs on aibo-mac and aibo-dev
-> (it ran on both, not just aibo-mac) need manual removal directly on those
-> machines — no remote access to either from here to confirm or do it. If you
-> find a stray reference elsewhere, it's stale; RustDesk is the one true answer
-> now (see `Infrastructure/rustdesk.md` in `aibo-server`).
+> desktop needs instead. Source deleted from this repo. **aibo-dev: confirmed
+> removed** (2026-08-16 — `com.sandesh.cptr-input`/`com.sandesh.agent-desktop`
+> launchd jobs booted out, plists deleted, no process/socket left). **aibo-mac:
+> still needs manual removal** — no remote access to that machine from here to
+> confirm or do it. If you find a stray reference elsewhere, it's stale;
+> RustDesk is the one true answer now (see `Infrastructure/rustdesk.md` in
+> `aibo-server`).
 
 ## Run
 ```bash
