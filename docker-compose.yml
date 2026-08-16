@@ -66,6 +66,16 @@ services:
       NTFY_URL: "${NTFY_URL:-http://ntfy}"
       NTFY_TOPIC: "${NTFY_TOPIC}"
       NTFY_TOKEN: "${NTFY_TOKEN}"
+    volumes:
+      # Read-only so publish_files (added 2026-08-16) can actually open a local_path an agent
+      # gives it -- containerized, so it can't see the host filesystem otherwise. Deliberately
+      # scoped to /tmp only, not a broader mount (e.g. the home dir): this container is reachable
+      # by every agent that talks MCP here, so keep its filesystem blast radius to "whatever an
+      # agent already staged for publishing" rather than "everything on the box". Stage a file
+      # there first (cp foo.pdf /tmp/) if it lives elsewhere. Host installs (aibo-mac/aibo-dev/
+      # sage-agent, install.sh, no Docker) don't need this -- they already run as a normal
+      # process with full local filesystem access.
+      - /tmp:/tmp:ro
     networks: [default, apps]
 
 networks:

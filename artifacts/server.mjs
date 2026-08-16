@@ -28,6 +28,9 @@ const PUSH_ONLY_ROUTES = [
   // docker network. Still token-gated below (same requireToken() as the write routes) -- this
   // host stays "nothing without the token", not "read is public here now".
   ['GET', '/api/list'],
+  // POST /api/publish-files — added 2026-08-16, see the handler below for the full writeup.
+  // Same no-SSO-but-token-gated shape as the other write routes.
+  ['POST', '/api/publish-files'],
 ]
 
 const ARTIFACTS_DIR = path.join(ROOT, 'artifacts')
@@ -299,7 +302,14 @@ function filterBoard(){
 </script>`, { back: false })
 }
 
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.md': 'text/markdown' }
+const TYPES = {
+  '.html': 'text/html', '.htm': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
+  '.css': 'text/css', '.json': 'application/json', '.md': 'text/markdown', '.txt': 'text/plain',
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
+  '.webp': 'image/webp', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
+  '.pdf': 'application/pdf', '.zip': 'application/zip', '.mp4': 'video/mp4', '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav', '.woff': 'font/woff', '.woff2': 'font/woff2', '.csv': 'text/csv',
+}
 
 // ── type-specific render helpers (svg/mermaid/code pages share the board's page() chrome —
 // the topbar's own "← board" link handles navigation, so these are just the content) ──
@@ -482,6 +492,67 @@ const server = http.createServer(async (req, res) => {
       const rel = `/a/${id}`
       notifyPublish(`${meta.title} (v${n})`, BASE + rel)
       return send(res, 200, JSON.stringify({ ok: true, id, url: BASE + rel, version: n }), 'application/json')
+    } catch (e) { return send(res, 400, JSON.stringify({ error: String(e.message || e) }), 'application/json') }
+  }
+
+  // ── multi-file / binary bundle publish (token-gated) — added 2026-08-16 ──
+  // POST {title, source?, files:[{path, content_base64}]}
+  // The general answer to "an artifact should be able to take a webpage or any file or anything
+  // at all": one or more files, each raw-byte-exact. Covers a single arbitrary file (a bundle of
+  // one — a PDF, an image, a zip, whatever), and equally a full multi-file webpage export
+  // (HTML+CSS+JS+images with relative links preserved) — same mechanism either way.
+  //
+  // Each file arrives as base64 in the JSON body. Critically, that base64 is expected to be
+  // produced by the CALLING PROCESS reading its own local disk (mcp-tools' Python code, or any
+  // other script) — never typed out by an LLM mid-conversation. That distinction is the whole
+  // point: an earlier attempt to publish a screenshot by having an agent reproduce a ~21,000-
+  // character base64 blob as literal generated text silently dropped a character and corrupted
+  // the image (see git log / Services/artifacts.md for the writeup). Decoded here with
+  // Buffer.from(..., 'base64') — binary-safe, unlike the utf8-forced reads the text-content
+  // routes above use — and written byte-exact. Served back by the existing /apps/:id/*rel GET
+  // route below, which was already binary-safe (plain Buffer read, no encoding assumption).
+  if (req.method === 'POST' && url === '/api/publish-files') {
+    if (!requireToken(req, res)) return
+    try {
+      const body = JSON.parse(await readBody(req, 150_000_000))   // base64 bloats ~33%; generous cap for real binaries/images
+      const { title, source = '' } = body
+      const files = Array.isArray(body.files) ? body.files : []
+      if (!files.length) return send(res, 400, JSON.stringify({ error: 'files required' }), 'application/json')
+      const date = new Date().toISOString().slice(0, 10)
+      const base = `${date}-${slug(title)}`
+      const dir = path.join(ROOT, 'apps', base)
+      fs.mkdirSync(dir, { recursive: true })
+      let hasIndex = false
+      const written = []
+      for (const f of files) {
+        const rel = safe(String(f.path || '').replace(/^\/+/, ''))
+        const dest = path.join(dir, rel)
+        // belt-and-suspenders against path traversal: safe() already strips leading ../, this
+        // re-checks the resolved path never leaves the bundle dir even via a mid-string ../
+        if (!rel || rel.startsWith('..') || (!dest.startsWith(dir + path.sep) && dest !== dir)) {
+          return send(res, 400, JSON.stringify({ error: `bad path: ${f.path}` }), 'application/json')
+        }
+        fs.mkdirSync(path.dirname(dest), { recursive: true })
+        fs.writeFileSync(dest, Buffer.from(f.content_base64 || '', 'base64'))
+        if (rel === 'index.html') hasIndex = true
+        written.push(rel)
+      }
+      if (!hasIndex && written.length > 1) {
+        // no entry point supplied and more than one file — synthesize a plain listing page so
+        // the bundle is still directly openable at its base URL instead of a dead end.
+        const links = written.map(w => `<li><a href="${encodeURI(w)}">${esc(w)}</a></li>`).join('')
+        fs.writeFileSync(path.join(dir, 'index.html'),
+          page(title || base, `<div class="content"><h2>${esc(title || base)}</h2><ul>${links}</ul></div>`, { back: false }))
+        hasIndex = true
+      }
+      fs.writeFileSync(path.join(dir, '.type'), 'app')
+      if (source) fs.writeFileSync(path.join(dir, '.source'), source)
+      // hasIndex (supplied or synthesized) → base URL serves it via the existing default-to-
+      // index.html rule below. Otherwise there's exactly one file (see the synthesize branch
+      // above) — link straight to it.
+      const rel = hasIndex ? `/apps/${base}/` : `/apps/${base}/${encodeURI(written[0])}`
+      notifyPublish(title || base, BASE + rel)
+      return send(res, 200, JSON.stringify({ ok: true, url: BASE + rel, files: written.length }), 'application/json')
     } catch (e) { return send(res, 400, JSON.stringify({ error: String(e.message || e) }), 'application/json') }
   }
 

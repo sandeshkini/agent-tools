@@ -9,8 +9,9 @@ review whenever he next checks his phone, or **push a bare alert** with no page 
 Publishing a page always fires a phone notification too — he never has to be told separately
 that something's ready, the tap-to-open link is already in the push.
 
-Exposes 5 tools from this one place (add a tool here → every agent gets it, no per-adapter
-work) — 2 for the artifacts board, 2 for versioned artifacts, 1 for phone push:
+Exposes 6 tools from this one place (add a tool here → every agent gets it, no per-adapter
+work) — 2 for the artifacts board, 2 for versioned artifacts, 1 for binary/multi-file bundles,
+1 for phone push:
   • publish_artifact(title, content_markdown, artifact_type="markdown", language="")
       one-shot publish (dated file, no id) → POSTs /api/publish, fires an ntfy push, returns URL.
   • create_artifact(title, content, artifact_type="markdown", language="")
@@ -19,9 +20,14 @@ work) — 2 for the artifacts board, 2 for versioned artifacts, 1 for phone push
       pushes a new version (v2, v3, ...) to an existing id's SAME url — PUTs /api/artifacts/:id.
   • list_artifacts() → newest-first text listing (name/type/version/id/source/url), so an agent
       can find an id before calling update_artifact.
+  • publish_files(title, files) → publish one or more local files (any type, binary included) as
+      a single artifact — a whole webpage export, an app bundle, or just one arbitrary file (PDF,
+      image, zip, ...). Each file is read straight off local disk by THIS server, never retyped
+      by the calling agent as text — see the tool's own docstring for why that distinction matters
+      and where local_path must resolve on each deployment (Docker vs host install differ).
   • notify(title, message, priority) → sends a phone push via ntfy, no page — for a bare alert
       that doesn't need a page (e.g. "build finished, 3 tests failing"), separate from the
-      auto-push the two publish tools above already give you for free.
+      auto-push the publish tools above already give you for free.
 
 Every artifact this server publishes/creates is auto-tagged with a single `source` field — which
 system + which machine, e.g. "cptr@aibo-linux" — composed from SOURCE_LABEL + COMPUTER_LABEL env
@@ -35,6 +41,7 @@ Served over Streamable HTTP at /mcp so every agent reaches it by URL:
 MCP tool calls surface in each agent as ordinary tool_use/tool_result → they render as the
 adapters' native tool-call cards.
 """
+import base64
 import datetime
 import json
 import os
@@ -47,7 +54,12 @@ ARTIFACTS_API = os.getenv("ARTIFACTS_API", "http://artifacts:8080/api/publish")
 _ARTIFACTS_BASE = ARTIFACTS_API.rsplit("/api/", 1)[0]
 ARTIFACTS_CREATE_API = f"{_ARTIFACTS_BASE}/api/artifacts"
 ARTIFACTS_LIST_API = f"{_ARTIFACTS_BASE}/api/list"
+ARTIFACTS_FILES_API = f"{_ARTIFACTS_BASE}/api/publish-files"
 PUBLISH_TOKEN = os.getenv("PUBLISH_TOKEN", "")
+# Per-file / per-bundle caps for publish_files — generous (these are real binaries now, not
+# hand-typed text) but bounded so one runaway call can't hang the request or the server.
+MAX_FILE_BYTES = 25 * 1024 * 1024
+MAX_TOTAL_BYTES = 100 * 1024 * 1024
 # Stamped onto every artifact this instance publishes/creates, so the board can show/filter "who
 # sent this" without trusting the calling LLM to type it correctly per-call — a deployment fact,
 # not something the agent decides. ONE field on the wire (`source`), composed from two env vars
@@ -191,6 +203,65 @@ def list_artifacts() -> str:
         return "\n".join(lines)
     except Exception as e:
         return f"list_artifacts failed: {e}"
+
+
+@mcp.tool()
+def publish_files(title: str, files: list) -> str:
+    """Publish one or more local files as a single artifact — a whole webpage (HTML + CSS/JS/
+    images, relative links preserved), a self-contained app bundle, or just one arbitrary file
+    (PDF, image, zip, anything). Use this instead of publish_artifact/create_artifact whenever
+    the content is binary, already sitting on disk, or too large to safely retype as text: each
+    file is read directly off local disk BY THIS SERVER and uploaded as raw bytes — never passed
+    through you as generated text — so nothing gets silently corrupted or truncated no matter how
+    large or opaque (a giant base64 blob typed out by an LLM mid-conversation is exactly the
+    failure mode this avoids — it happened once, dropped a character, corrupted an image).
+
+    WHERE THE FILES MUST LIVE — differs per deployment:
+      - On aibo-linux this tool runs in Docker and can only see /tmp (read-only). Stage files
+        there first if they live elsewhere, e.g. `cp report.pdf /tmp/`.
+      - On a host install (aibo-mac / aibo-dev / sage-agent — no Docker) this runs as a normal
+        process with full local filesystem access — any path this machine can read works as-is.
+
+    :param title: Short title for the artifact.
+    :param files: list of {"local_path": "/abs/path/on/this/machine", "dest_path": "optional
+        relative/name.ext"}. dest_path defaults to the file's own basename. Give one file
+        dest_path "index.html" to make a multi-file bundle open directly as a webpage at its
+        base URL; a lone file (no index.html, only one entry) is served directly at its own URL.
+        With multiple files and no index.html, a plain listing page is generated automatically
+        so the bundle is still directly openable instead of a dead end.
+    """
+    if not files:
+        return "publish_files failed: no files given"
+    try:
+        payload_files = []
+        total = 0
+        for f in files:
+            local_path = f.get("local_path") or f.get("localPath")
+            if not local_path:
+                return "publish_files failed: every file needs local_path"
+            dest_path = f.get("dest_path") or f.get("destPath") or os.path.basename(local_path)
+            if ".." in dest_path.replace("\\", "/").split("/"):
+                return f"publish_files failed: dest_path '{dest_path}' may not contain '..'"
+            try:
+                size = os.path.getsize(local_path)
+            except OSError as e:
+                return f"publish_files failed: can't read {local_path} ({e}) — remember: on the Docker deployment this process can only see /tmp"
+            if size > MAX_FILE_BYTES:
+                return f"publish_files failed: {local_path} is {size} bytes, over the {MAX_FILE_BYTES}-byte per-file limit"
+            total += size
+            if total > MAX_TOTAL_BYTES:
+                return f"publish_files failed: bundle exceeds the {MAX_TOTAL_BYTES}-byte total limit"
+            with open(local_path, "rb") as fh:
+                content_b64 = base64.b64encode(fh.read()).decode("ascii")
+            payload_files.append({"path": dest_path, "content_base64": content_b64})
+        body = json.dumps({"title": title, "source": ORIGIN_LABEL, "files": payload_files}).encode()
+        req = urllib.request.Request(ARTIFACTS_FILES_API, data=body, method="POST",
+                                     headers={"Content-Type": "application/json",
+                                              "X-Publish-Token": PUBLISH_TOKEN})
+        resp = json.loads(urllib.request.urlopen(req, timeout=60).read().decode() or "{}")
+        return "Published: " + PUBLIC_BASE + resp.get("url", "")
+    except Exception as e:
+        return f"publish_files failed: {e}"
 
 
 @mcp.tool()

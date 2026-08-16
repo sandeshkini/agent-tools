@@ -12,6 +12,14 @@ Define a tool once here → every agent gets it, no per-adapter work.
   - `update_artifact(artifact_id, content, language="")` — pushes a new version to an existing id's
     same URL.
   - `list_artifacts()` — newest-first text listing, to find an id before calling `update_artifact`.
+  - `publish_files(title, files)` — publish one or more local files as a single artifact: a whole
+    webpage export (HTML+CSS+JS+images), an app bundle, or just one arbitrary file (PDF, image,
+    zip, anything). Each file is read off local disk by *this server*, base64-encoded here, and
+    POSTed to `/api/publish-files`, which decodes and writes it byte-exact — content never passes
+    through an agent's own text generation, so it can't get corrupted the way a hand-typed base64
+    blob can (see `Services/artifacts.md` for the incident that motivated this). `local_path` must
+    resolve on *this* deployment: the Docker instance mounts `/tmp:/tmp:ro` only (stage files
+    there first), a host install (`install.sh`) has full local filesystem access already.
   - `notify(title, message, priority)` — bare ntfy phone push, no page.
 - Runs as the `mcp-tools` compose service (networks: `default` + `apps`; host port `127.0.0.1:8009`).
 - Creds/config via env (compose `.env`): `PUBLISH_TOKEN`, `NTFY_URL`, `NTFY_TOPIC`, `NTFY_TOKEN`,

@@ -10,7 +10,7 @@ is the primary agent UI now and consumes these.
 |---|---|---|
 | `artifacts` | board (publish any content type, versioned) | `artifacts.kingdomofluna.com` (write: `push.artifacts.kingdomofluna.com`) |
 | `ntfy` | phone push bus | `ntfy.kingdomofluna.com`, host `:8095` |
-| `mcp-tools` | shared MCP: `publish_artifact`/`create_artifact`/`update_artifact`/`list_artifacts`/`notify` | `127.0.0.1:8009/mcp` (cptr consumes this) |
+| `mcp-tools` | shared MCP: `publish_artifact`/`create_artifact`/`update_artifact`/`list_artifacts`/`publish_files`/`notify` | `127.0.0.1:8009/mcp` (cptr consumes this) |
 
 ### Host daemon (`./install.sh`, not Docker)
 
