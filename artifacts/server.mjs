@@ -88,16 +88,10 @@ h1{font-size:1.5rem;font-weight:700;letter-spacing:-.01em;margin:0 0 4px}
   padding:.6rem .85rem;font-size:.85rem;min-width:220px;outline:none;transition:border-color .15s}
 .search:focus{border-color:var(--accent)}.search::placeholder{color:var(--muted)}
 
-.filters{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
-.filter-group{display:flex;align-items:center;gap:10px}
-.filter-label{flex-shrink:0;width:38px;font-family:var(--mono);font-size:.66rem;font-weight:700;color:var(--muted);
-  text-transform:uppercase;letter-spacing:.05em}
-.chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
-.chips::-webkit-scrollbar{display:none}
-.chip{flex-shrink:0;font-family:var(--mono);background:var(--surface2);border:1px solid var(--border);color:var(--muted);
-  border-radius:999px;padding:.4rem .9rem;font-size:.72rem;font-weight:600;cursor:pointer;white-space:nowrap;transition:.15s}
-.chip:hover{border-color:var(--border-med);color:var(--text)}
-.chip.active{background:rgba(88,166,255,.12);border-color:rgba(88,166,255,.4);color:var(--accent)}
+.toolbar{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
+.select{background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);
+  padding:.6rem .85rem;font-size:.85rem;font-family:var(--mono);outline:none;cursor:pointer;transition:border-color .15s}
+.select:hover{border-color:var(--border-med)}.select:focus{border-color:var(--accent)}
 
 .group{margin-bottom:4px}
 .day-hdr{font-family:var(--mono);font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;
@@ -140,7 +134,7 @@ h1{font-size:1.5rem;font-weight:700;letter-spacing:-.01em;margin:0 0 4px}
   .card .t{font-size:.88rem}
   .type-ico{width:28px;height:28px;font-size:.85rem}
   .chev{display:none}
-  .filter-label{width:auto;font-size:.6rem}
+  .select{flex:1;min-width:0}
   .content{padding:18px 16px}
   .verpager{flex-wrap:wrap;gap:8px}
 }
@@ -260,60 +254,34 @@ function indexPage() {
     `<span class="grow"><div class=t>${esc(i.name)}</div><div class=d>${TYPE_NAME[i.type] || 'summary'} · ${esc(i.source || 'manual')} · ${esc(when(i.t))}${i.versions > 1 ? ` · v${i.versions}` : ''}</div></span>` +
     `<span class=chev>›</span></a>`
   const groupsHtml = groups.map(g => `<div class=group><div class=day-hdr>${esc(g.label)}</div>${g.items.map(row).join('')}</div>`).join('')
-  // Chips are just shortcuts into the ONE real filter mechanism — the search box. Clicking one
-  // writes/replaces a `type:x` or `src:x` token in the input and re-filters from that; typing
-  // the same token by hand does the same thing. No separate click-vs-type filter paths.
-  const chipRow = (id, prefix, opts, label) => `<div class=filter-group><span class=filter-label>${label}</span>` +
-    `<div class="chips chiprow" id=${id} data-prefix="${prefix}">${opts.map(o =>
-      `<button class="chip${o.v === 'all' ? ' active' : ''}" data-filter="${esc(o.v)}">${esc(o.t)}</button>`
-    ).join('')}</div></div>`
-  const filtersHtml = `<div class=filters>${
-    chipRow('chips', 'type', [{ v: 'all', t: 'All' }, ...types.map(t => ({ v: t, t: TYPE_LABEL[t].replace(/^[^ ]+ /, '') }))], 'Type')
-  }${
-    sources.length > 1 ? chipRow('sourceChips', 'src', [{ v: 'all', t: 'All' }, ...sources.map(s => ({ v: s, t: s }))], 'Source') : ''
-  }</div>`
+  // Plain table-style filters: a search box + two dropdowns, always visible, independent of each
+  // other — click a dropdown, pick a value, done. No hidden syntax, nothing that appears/disappears
+  // based on how much data exists.
+  const typeOpts = `<option value="all">All types</option>` + types.map(t =>
+    `<option value="${t}">${esc(TYPE_LABEL[t].replace(/^[^ ]+ /, ''))}</option>`).join('')
+  const sourceOpts = `<option value="all">All sources</option>` + sources.map(s =>
+    `<option value="${esc(s)}">${esc(s)}</option>`).join('')
   return page('Artifacts', `
 <div class=board-hdr><div><h1>Artifacts</h1><p class=sub>${items.length} published, newest first.</p></div>
-<input id=search class=search placeholder="Search, or type:svg / src:cptr…" oninput="filterBoard()"></div>
-${filtersHtml}
+<input id=search class=search placeholder="Search by name…" oninput="filterBoard()"></div>
+<div class=toolbar>
+<select id=typeFilter class=select onchange="filterBoard()">${typeOpts}</select>
+<select id=sourceFilter class=select onchange="filterBoard()">${sourceOpts}</select>
+</div>
 <div id=list>${groupsHtml || `<p class=empty>Nothing published yet.</p>`}</div>
 <p id=noresults class=empty style="display:none">No matches.</p>
 <script>
-// Single source of truth: the search box text. "type:x" / "src:x" tokens narrow those facets,
-// everything else is free-text matched against the name. Chips read/write this same string —
-// there's exactly one filtering mechanism, chips are just a faster way to type a token.
-function parseQuery(q){
-  var type='all', src='all', free=[];
-  (q||'').split(/\\s+/).forEach(function(tok){
-    if(!tok) return;
-    var m;
-    if((m=/^type:(.+)$/i.exec(tok))) type=m[1];
-    else if((m=/^src:(.+)$/i.exec(tok))) src=m[1];
-    else free.push(tok);
-  });
-  return {type:type, src:src, free:free.join(' ').toLowerCase()};
-}
-function setToken(q, prefix, value){
-  var re=new RegExp('^'+prefix+':','i');
-  var tokens=(q||'').split(/\\s+/).filter(function(t){ return t && !re.test(t); });
-  if(value!=='all') tokens.push(prefix+':'+value);
-  return tokens.join(' ');
-}
-function syncChips(id, active){
-  var row=document.getElementById(id); if(!row) return;
-  row.querySelectorAll('.chip').forEach(function(x){ x.classList.toggle('active', x.dataset.filter===active); });
-}
 function filterBoard(){
-  var parsed=parseQuery(document.getElementById('search').value);
-  syncChips('chips', parsed.type);
-  syncChips('sourceChips', parsed.src);
+  var q=(document.getElementById('search').value||'').toLowerCase();
+  var type=document.getElementById('typeFilter').value;
+  var source=document.getElementById('sourceFilter').value;
   var anyVisible=false;
   document.querySelectorAll('#list .group').forEach(function(g){
     var groupVisible=false;
     g.querySelectorAll('.card').forEach(function(c){
-      var okType = parsed.type==='all' || c.dataset.type===parsed.type;
-      var okSource = parsed.src==='all' || c.dataset.source===parsed.src;
-      var okQuery = !parsed.free || c.dataset.q.indexOf(parsed.free)>-1;
+      var okType = type==='all' || c.dataset.type===type;
+      var okSource = source==='all' || c.dataset.source===source;
+      var okQuery = !q || c.dataset.q.indexOf(q)>-1;
       var show = okType&&okSource&&okQuery;
       c.style.display = show ? '' : 'none';
       if(show) groupVisible=true;
@@ -323,14 +291,6 @@ function filterBoard(){
   });
   document.getElementById('noresults').style.display = anyVisible ? 'none' : '';
 }
-document.querySelectorAll('.chiprow').forEach(function(row){
-  row.addEventListener('click', function(e){
-    var b=e.target.closest('.chip'); if(!b) return;
-    var input=document.getElementById('search');
-    input.value=setToken(input.value, row.dataset.prefix, b.dataset.filter).trim();
-    filterBoard();
-  });
-});
 </script>`, { back: false })
 }
 
