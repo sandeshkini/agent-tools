@@ -71,6 +71,10 @@ verifier tap can distinguish injected events from the human's.
 - Linux `trusted:false` -> `/dev/uinput` not writable. Re-login after install so
   the `input` group applies, or check the udev rule.
 
+## Research / planning
+
+Roadmap + mobile-viewer plan docs live at `aibo-server/research/cptr-input/` (not in this repo).
+
 ## Gotchas
 
 - macOS: a rebuild changes the cdhash and drops the grant. If two bundles with
