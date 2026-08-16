@@ -26,10 +26,22 @@ COMPUTER_LABEL="${COMPUTER_LABEL:-$(scutil --get ComputerName 2>/dev/null || hos
 
 echo "== venv + deps =="
 command -v uv >/dev/null || { echo "uv required (same tool cptr installs via) — https://docs.astral.sh/uv/"; exit 1; }
-if [ ! -d "$HERE/.venv" ]; then
-  uv venv --python 3.10 "$HERE/.venv"
+
+# Deploy to ~/.local/share/mcp-tools rather than running in-place from $HERE. Files under
+# ~/Documents can carry a com.apple.provenance xattr (stamped by some write paths, AI-agent
+# tools included — it re-stamps itself even after `xattr -d`) that silently blocks a
+# launchd-spawned process from opening the file/venv at all: the process starts, never prints a
+# line, never binds the port, and never exits either — no error surfaced anywhere obvious. Same
+# root cause + same fix as cptr-watchdog's install.sh (see its comment for the fuller writeup).
+# The repo copy stays the source of truth; re-run install.sh after editing server.py.
+DEPLOY_DIR="$HOME/.local/share/mcp-tools"
+mkdir -p "$DEPLOY_DIR"
+cp "$HERE/server.py" "$DEPLOY_DIR/server.py"
+xattr -d com.apple.provenance "$DEPLOY_DIR/server.py" 2>/dev/null || true
+if [ ! -d "$DEPLOY_DIR/.venv" ]; then
+  uv venv --python 3.10 "$DEPLOY_DIR/.venv"
 fi
-uv pip install --python "$HERE/.venv/bin/python" -q "mcp[cli]>=1.9,<2"
+uv pip install --python "$DEPLOY_DIR/.venv/bin/python" -q "mcp[cli]>=1.9,<2"
 
 echo "== launchd service =="
 PLIST="$HOME/Library/LaunchAgents/com.sandesh.mcp-tools.plist"
@@ -40,10 +52,10 @@ cat > "$PLIST" <<PL
   <key>Label</key><string>com.sandesh.mcp-tools</string>
   <key>ProgramArguments</key>
   <array>
-    <string>$HERE/.venv/bin/python</string>
-    <string>$HERE/server.py</string>
+    <string>$DEPLOY_DIR/.venv/bin/python</string>
+    <string>$DEPLOY_DIR/server.py</string>
   </array>
-  <key>WorkingDirectory</key><string>$HERE</string>
+  <key>WorkingDirectory</key><string>$DEPLOY_DIR</string>
   <key>EnvironmentVariables</key>
   <dict>
     <key>HOST</key><string>127.0.0.1</string>
