@@ -149,8 +149,23 @@ existing-profile launch grant`) before ever reaching target-matching logic — s
 target-matching refusal instead is proof the grant took effect, even without a real foreground
 Chrome window open at test time to complete the full attach.
 
-Other machines (aibo-mac, aibo-linux's separate cua-driver setup) still run plain `serve`, no
-extra args — `standard` permission mode, no pre-authorized browser profile. Not yet applied there.
+### aibo-mac: `--grant existing-profile` enabled (2026-08-16)
+
+Same fix, applied the same way: `com.trycua.cua-driver.plist`'s `ProgramArguments` now reads
+`[cua-driver, serve, --grant, existing-profile]`, reloaded via `launchctl bootout` + `bootstrap`
+(not `kickstart`). Confirmed the new args are what's actually running
+(`launchctl print gui/$(id -u)/com.trycua.cua-driver` → `arguments` array), and both TCC grants
+(Accessibility, Screen Recording) survived the restart (`check_permissions` → both `true`, new
+pid).
+
+**Verified the grant is live** the same way as aibo-dev: `browser_prepare` with
+`strategy.kind=existing_profile` against a real, on-screen Google Chrome window returned
+`browser_wrong_target_refused: "the approved Google Chrome window has no exact New Tab button"` —
+a target-matching refusal, not the permission-mode refusal `standard` mode gives before this grant
+is set. Same proof pattern: reaching target-matching logic at all means the grant took effect.
+
+aibo-linux's separate cua-driver setup still runs plain `serve`, no extra args — `standard`
+permission mode, no pre-authorized browser profile. Not yet applied there.
 
 ## Guardrails
 
@@ -163,7 +178,7 @@ launch control, same reasoning as aibo-mac's README section on it.
 
 | Machine | Version | Autostart | Accessibility | Screen Recording | Existing-profile grant | MCP (Claude/OpenCode) |
 |---|---|---|---|---|---|---|
-| aibo-mac | 0.19.3 (2026-08-14) | `launchd` KeepAlive | granted | granted | no (`standard` mode) | both connected |
+| aibo-mac | 0.19.3 (2026-08-14) | `launchd` KeepAlive | granted | granted | **yes (2026-08-16)** | both connected |
 | aibo-dev | 0.20.0 (2026-08-16) | `launchd` KeepAlive | granted | granted | **yes (2026-08-16)** | both connected |
 | aibo-linux | not installed | — | — | — | — | — |
 
