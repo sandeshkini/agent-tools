@@ -21,9 +21,8 @@ systemd (Linux), not in a container.
 |---|---|---|
 | `cptr-watchdog` | periodic self-heal for cptr's own service — re-registers it if the launchd job/systemd unit was deregistered entirely (not just crashed; `KeepAlive`/`Restart=always` don't cover that), restarts it if registered but unhealthy | `cptr-watchdog/install.sh` |
 | `mcp-tools` (host mode) | same `publish_artifact`/`notify` MCP as the Docker service above, for a machine with no Docker (thin client hitting aibo's shared board/bus over the public URLs, not the compose network) | `mcp-tools/install.sh` |
-| `cua-driver` | third-party computer-use MCP binary (not vendored here) — 56 tools: click/type/screenshot/launch-apps/drag/record. Install + per-machine status documented, not code | `cua-driver/README.md` |
 
-See `cptr-watchdog/README.md`/`mcp-tools/README.md`/`cua-driver/README.md` — all carry
+See `cptr-watchdog/README.md`/`mcp-tools/README.md` — both carry
 per-machine service state (paths/ports/versions differ per host), so installers generate
 the launchd/systemd unit rather than shipping one checked in.
 
