@@ -1,16 +1,15 @@
 # computer-use
 
-Lets agents (Claude Code, OpenCode, cptr) use a Mac the way a person does. It sets up the
-same two tools as aibo-mac:
+Lets agents (Claude Code, OpenCode, cptr) use a Mac the way a person does, with two tools:
 
 | Tool | Drives | How agents use it | Vendor |
 |---|---|---|---|
 | **cua-driver** | Desktop apps and anything outside a web page: windows, menus, dialogs, clicks, screenshots | MCP server (`cua-driver mcp`) + the `cua-driver` skill | [trycua/cua](https://github.com/trycua/cua), installed as `/Applications/CuaDriver.app` |
 | **agent-browser** | Inside web pages: snapshot, click, type, download, tabs | CLI + the `agent-browser` skill (no MCP needed) | [vercel-labs/agent-browser](https://github.com/vercel-labs/agent-browser), `npm i -g agent-browser` |
 
-The rule on aibo-mac: web pages go through agent-browser, everything else through cua-driver.
-The machine-specific rules (1Password logins, 2FA from Messages, the Agent Chrome) are in
-`personal-agent/skills/mac-operator`, which is not part of this repo.
+The rule: web pages go through agent-browser, everything else through cua-driver. This folder
+is generic. Which machine runs what (versions, what's logged in, local rules) is recorded in
+aibo-server `machines/README.md` § "Computer use", not here.
 
 ## Set up a new Mac
 
@@ -68,22 +67,13 @@ cua-driver skills update
 npm i -g agent-browser
 ```
 
-## Per machine
-
-| Machine | Status |
-|---|---|
-| aibo-mac | Installed (cua-driver 0.28.2, agent-browser 0.38.1, Agent Chrome on :9333). The script was written from this setup |
-| aibo-dev, artos-agent | Not installed yet |
-
 ## Linux: use something else
 
-Don't install cua-driver on Linux. aibo-linux tried it and removed it on 2026-09-25: among
-other problems it switched on the Orca screen reader. Linux machines use
-**computer-use-linux** (desktop, through AT-SPI) plus **agent-browser** (headed Chrome for
-Testing, sandboxed by an AppArmor profile). That setup is written up in aibo-server:
+Don't use cua-driver on Linux: it was tried and removed (among other problems it switched on
+the Orca screen reader). Linux uses **computer-use-linux** (desktop, through AT-SPI) plus
+**agent-browser** (headed Chrome for Testing, kept sandboxed). That setup is in aibo-server
 `infrastructure/agents/cptr/README.md` § "Desktop + browser control". This script refuses to
 run on anything but macOS.
 
-The older, longer cua-driver notes (permission modes, `--grant existing-profile` being
-launch-time only, the aibo-dev setup) were removed in commit `00dccac`. Read them with
-`git show 00dccac^:cua-driver/README.md`.
+Older, longer cua-driver notes (permission modes, `--grant existing-profile` being
+launch-time only) were removed in commit `00dccac`: `git show 00dccac^:cua-driver/README.md`.

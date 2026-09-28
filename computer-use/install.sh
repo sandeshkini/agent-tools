@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Computer use for agents on a Mac: cua-driver (desktop apps) + agent-browser (web pages),
 # optionally with the "Agent Chrome" (the agents' own visible Chrome on CDP port 9333).
-# Same setup as aibo-mac. Idempotent: re-run any time; it fixes what's missing and leaves
+# Idempotent: re-run any time; it fixes what's missing and leaves
 # the rest alone. See README.md for what each step does and what stays manual.
 #
 #   ./install.sh                  cua-driver + its daemon, agent-browser, skills, MCP wiring
