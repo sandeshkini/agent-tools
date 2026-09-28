@@ -20,6 +20,7 @@ systemd (Linux), not in a container.
 | Tool | What | Install |
 |---|---|---|
 | `cptr-watchdog` | periodic self-heal for cptr's own service — re-registers it if the launchd job/systemd unit was deregistered entirely (not just crashed; `KeepAlive`/`Restart=always` don't cover that), restarts it if registered but unhealthy | `cptr-watchdog/install.sh` |
+| `computer-use` | cua-driver (desktop apps) + agent-browser (web pages) + the optional Agent Chrome (CDP :9333), skills and MCP wiring, for any Mac. What aibo-mac runs | `computer-use/install.sh [--agent-chrome]`, then `cua-driver permissions grant` |
 | `mcp-tools` (host mode) | same `publish_artifact`/`notify` MCP as the Docker service above, for a machine with no Docker (thin client hitting aibo's shared board/bus over the public URLs, not the compose network) | `mcp-tools/install.sh` |
 
 See `cptr-watchdog/README.md`/`mcp-tools/README.md` — both carry
