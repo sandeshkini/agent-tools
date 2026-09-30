@@ -1,4 +1,11 @@
 #!/usr/bin/env bash
+
+# On a Mac where this job is a named app (Personal Agent's bin/pa-app; see personal-agent/systems/APPS.md),
+# don't create a second, unnamed LaunchAgent: update the app instead.
+if [ -d "$HOME/Applications/Personal Agent/Agent Tools MCP.app" ]; then
+  echo "\"Agent Tools MCP\" is managed by pa-app on this Mac: edit the code in place, or run"
+  echo "  personal-agent/bin/pa-app rebuild \"Agent Tools MCP\"   (see personal-agent/systems/APPS.md)"; exit 0
+fi
 # Host install for mcp-tools (no Docker) — for a machine that shares aibo's artifacts
 # board + ntfy bus (both singletons, stay on aibo) but needs its own local MCP endpoint so
 # ITS cptr/Claude Code/OpenCode can reach publish_artifact + notify at 127.0.0.1:8009/mcp,
