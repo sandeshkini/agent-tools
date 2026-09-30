@@ -35,6 +35,16 @@ repo, and `--profile-from <repo>` picks the one whose `[match]` fits this host.
 | `mcp-tools` | shared MCP: `publish_artifact`/`create_artifact`/`update_artifact`/`list_artifacts`/`publish_files`/`notify` | `127.0.0.1:8009/mcp` (cptr consumes this) |
 | `memory` | shared long-term agent memory: Graphiti temporal knowledge graph + FalkorDB, its own MCP (`add_memory`, `search_memory_facts`, …); nightly Markdown export to `ai-memory` | `127.0.0.1:8012/mcp/` on aibo-linux; aibo-mac over SSH. [memory/README.md](memory/README.md) |
 
+### Command line and skills
+
+`cli/agent-tools` (linked onto PATH) calls this machine's mcp-tools server, so any agent
+with a shell gets the same six tools, Codex included, which has no MCP wiring. The
+server keeps the tokens; the command only forwards the call. `agent-tools --help`.
+
+`skills/artifacts` and `skills/notify` tell agents when to publish or push and how. They
+are linked into Claude Code, OpenCode and Codex from `~/Documents/internal-tools/skills`
+(run its `link.sh` after adding one).
+
 ### Host tools (`<tool>/install.sh`, not Docker; `setup.sh` runs them per profile)
 
 Needs direct hardware access, so it runs on the host via launchd (macOS) /
