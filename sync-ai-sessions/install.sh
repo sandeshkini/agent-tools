@@ -17,7 +17,7 @@ if [ "$(uname -s)" != "Darwin" ]; then
   echo "this installer is macOS-only (launchd); on Linux use a systemd --user timer like aibo's"; exit 1
 fi
 
-REPO="$HOME/Documents/ai-memory"
+REPO="$HOME/Documents/ai-memory"; [ -d "$HOME/Documents/personal/ai-memory/.git" ] && REPO="$HOME/Documents/personal/ai-memory"
 if [ ! -d "$REPO/.git" ]; then
   echo "missing $REPO — clone it first:"
   echo "  git clone https://github.com/sandeshkini/ai-memory \"$REPO\""
@@ -43,7 +43,7 @@ cat > "$PLIST" <<PL
   <key>ProgramArguments</key>
   <array>
     <string>$HERE/.venv/bin/python</string>
-    <string>$HERE/sync_ai_sessions.py</string>
+    <string>$HERE/mac_wrapper.py</string>
   </array>
   <key>WorkingDirectory</key><string>$HERE</string>
   <key>StartInterval</key><integer>900</integer>
@@ -61,4 +61,4 @@ echo "  launchctl print gui/$(id -u)/com.sandesh.sync-ai-sessions | head -20"
 echo "  launchctl kickstart -k gui/$(id -u)/com.sandesh.sync-ai-sessions   # run now"
 echo "  tail -f /tmp/sync-ai-sessions.log"
 echo
-echo "manual run (no commit/push):  $HERE/.venv/bin/python $HERE/sync_ai_sessions.py --no-git"
+echo "manual run (export only, no commit/push):  $HERE/.venv/bin/python $HERE/sync_ai_sessions.py"
