@@ -56,7 +56,7 @@ Full Disk Access to read `TCC.db`. Without it, you get the names to look for.
 ## Run it (each Mac, at the Mac or over RustDesk)
 
 ```bash
-cd ~/Documents/personal/agent-tools && git pull && mac-apps/install.sh --check
+cd <your agent-tools clone> && git pull && mac-apps/install.sh --check
 mac-apps/install.sh --all        # then this, from Terminal, with someone able to click System Settings
 ```
 
