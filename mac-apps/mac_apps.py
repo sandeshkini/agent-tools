@@ -7,17 +7,20 @@ Run through ./install.sh (it checks for the Xcode Command Line Tools first). See
     install.sh --cptr           wrap cptr's LaunchAgent in cptr.app (Full Disk Access first, then switch)
     install.sh --watchdog       wrap the cptr watchdog in "cptr Watchdog.app"
     install.sh --stuck-watch    wrap Stuck Watch in "Stuck Watch.app"
-    install.sh --all            watchdog, Stuck Watch, then cptr (cptr last: its restart can end your session)
-    install.sh --rollback       put back the LaunchAgents mac-apps changed (from its backups)
+    install.sh --sync-ai-sessions / --mcp-tools   wrap those jobs ("AI Session Sync", "Agent Tools MCP")
+    install.sh --all            Stuck Watch, watchdog, then cptr (cptr last: its restart can end your session)
+    install.sh --rollback [KIND...]   put back the LaunchAgents mac-apps changed (from its backups);
+                                KIND = cptr, watchdog, stuck-watch, sync-ai-sessions, mcp-tools (default: all)
 
-    install.sh build "<Name>" [--bundle-id ID] -- <argv...>    build any app (launcher runs argv)
+    install.sh build "<Name>" [--bundle-id ID] [--rebuild] -- <argv...>   build any app (launcher runs argv)
     install.sh probe "<Name>" <path...>                        open paths as that app, via launchd
 
 Environment overrides:
     MAC_APPS_DIR             apps folder (default ~/Applications/Personal Agent if it exists,
                              else ~/Applications/Agent Apps)
     MAC_APPS_BUNDLE_PREFIX   bundle id prefix (default local.agent-apps)
-    MAC_APPS_SIGN_IDENTITY   codesign identity (default "-", ad-hoc)
+    MAC_APPS_SIGN_IDENTITY   codesign identity in your Keychain (default "-", ad-hoc). Used if it signs
+                             within 30 s; otherwise the app is signed ad-hoc
     MAC_APPS_CPTR_LABEL      pick cptr's LaunchAgent label if more than one job runs cptr
     MAC_APPS_CPTR_PORT       cptr's port, if detection gets it wrong
     NTFY_URL / NTFY_TOPIC / NTFY_TOKEN   push the result (else Stuck Watch's / mcp-tools' settings)
@@ -53,7 +56,13 @@ CONFIG_NAME = "mac-apps.json"        # in Contents/Resources: marks an app this 
 TCC_DB = "/Library/Application Support/com.apple.TCC/TCC.db"
 USER_TCC_DB = str(HOME / "Library/Application Support/com.apple.TCC/TCC.db")
 FDA_URL = "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles"
-NAMES = {"cptr": "cptr", "watchdog": "cptr Watchdog", "stuck-watch": "Stuck Watch"}
+NAMES = {"cptr": "cptr", "watchdog": "cptr Watchdog", "stuck-watch": "Stuck Watch",
+         "sync-ai-sessions": "AI Session Sync", "mcp-tools": "Agent Tools MCP"}
+KINDS = tuple(NAMES)
+TITLES = {"cptr": "cptr", "watchdog": "cptr watchdog", "stuck-watch": "Stuck Watch",
+          "sync-ai-sessions": "AI session sync", "mcp-tools": "Agent Tools MCP"}
+INSTALLERS = {"watchdog": "cptr-watchdog", "stuck-watch": "stuck-watch", "sync-ai-sessions": "sync-ai-sessions",
+              "mcp-tools": "mcp-tools"}
 
 # ------------------------------------------------------------------------------------ launcher
 LAUNCHER_C = r'''
@@ -296,7 +305,11 @@ def app_info(exe):
     if ".app/Contents/MacOS/" not in exe:
         return None
     app = Path(exe.split(".app/Contents/MacOS/")[0] + ".app")
-    info = {"app": app, "exe": exe, "name": app.stem, "bundle_id": "?", "kind": "unknown", "argv": None}
+    # kind: who manages the app (pa-app if it has pa-app.json, else mac-apps). probe_ok: its launcher is
+    # this tool's (has mac-apps.json), so it understands --probe. Older pa-app launchers would pass
+    # --probe through to the program they run.
+    info = {"app": app, "exe": exe, "name": app.stem, "bundle_id": "?", "kind": "unknown", "argv": None,
+            "probe_ok": False}
     try:
         ip = load_plist(app / "Contents" / "Info.plist")
         info["name"] = ip.get("CFBundleName", app.stem)
@@ -306,33 +319,73 @@ def app_info(exe):
     ours, pa = app / "Contents/Resources" / CONFIG_NAME, app / "Contents/Resources/pa-app.json"
     try:
         if ours.exists():
-            info.update(kind="mac-apps", argv=json.loads(ours.read_text())["argv"])
-        elif pa.exists():
+            info.update(kind="mac-apps", argv=json.loads(ours.read_text())["argv"], probe_ok=True)
+        if pa.exists():
             c = json.loads(pa.read_text())
-            info.update(kind="pa-app", argv=[c["python"], c["script"], *c.get("args", [])])
+            info["kind"] = "pa-app"
+            if not info["argv"]:
+                info["argv"] = [c["python"], c["script"], *c.get("args", [])]
     except Exception:
         pass
     return info
 
 
-def sign(app, bundle_id):
-    r = None
-    if SIGN_ID != "-":
+def verify_signature(app):
+    """(ok, message) from a strict deep verify: catches a broken seal, a missing sealed resource, detritus."""
+    r = subprocess.run(["codesign", "--verify", "--deep", "--strict", str(app)], capture_output=True, text=True)
+    return r.returncode == 0, r.stderr.strip()
+
+
+def sign(app, bundle_id, identity=None):
+    """Sign with `identity` (a stable local code-signing identity keeps privacy grants across rebuilds)
+    if it works within 30 s, else ad-hoc. Returns the identity used. Raises RuntimeError if the result
+    doesn't verify."""
+    identity = SIGN_ID if identity is None else identity
+    used, r = "-", None
+    if identity and identity != "-":
         try:
-            r = subprocess.run(["codesign", "--force", "--deep", "--sign", SIGN_ID, "--identifier", bundle_id, str(app)],
+            r = subprocess.run(["codesign", "--force", "--deep", "--sign", identity, "--identifier", bundle_id, str(app)],
                                capture_output=True, text=True, timeout=30)
         except subprocess.TimeoutExpired:
-            r = subprocess.CompletedProcess([], 1, "", "timed out (Keychain prompt waiting?)")
+            r = subprocess.CompletedProcess([], 1, "", "timed out (Keychain prompt waiting for the key's password?)")
         if r.returncode:
-            print(f"  signing with {SIGN_ID!r} failed ({r.stderr.strip()[:120]}); signing ad-hoc", file=sys.stderr)
-    if r is None or r.returncode:
-        subprocess.run(["codesign", "--force", "--deep", "--sign", "-", "--identifier", bundle_id, str(app)],
-                       check=True, capture_output=True)
+            print(f"  signing with {identity!r} failed ({r.stderr.strip()[:120]}); signing ad-hoc", file=sys.stderr)
+        else:
+            used = identity
+    if used == "-":
+        # A codesign killed mid-way leaves <file>.cstemp next to what it was signing. Sealing that into
+        # the ad-hoc signature and then losing it breaks the seal ("a sealed resource is missing"),
+        # and launchd may refuse to run the app.
+        for tmp in Path(app).rglob("*.cstemp"):
+            tmp.unlink(missing_ok=True)
+        r = subprocess.run(["codesign", "--force", "--deep", "--sign", "-", "--identifier", bundle_id, str(app)],
+                           capture_output=True, text=True)
+        if r.returncode:
+            raise RuntimeError(f"ad-hoc codesign failed: {r.stderr.strip()[:200]}")
+    good, msg = verify_signature(app)
+    if not good:
+        raise RuntimeError(f"signature doesn't verify: {msg[:200]}")
+    return used
 
 
-def build_app(name, argv, bundle_id=None, path_env=None, force=False):
-    """Make <APPS>/<name>.app whose launcher runs argv. Reuses an identical existing build (a rebuild
-    changes an ad-hoc signature, and macOS then forgets the app's privacy grants). Returns (exe, rebuilt)."""
+def build_app(name, argv, bundle_id=None, path_env=None, force=False, apps_dir=None, sign_identity=None,
+              resources=None, extra_config=None, reuse=True):
+    """Make <apps_dir>/<name>.app whose launcher runs argv (plus any arguments it's started with), signal
+    forwarding and --probe included. Returns (exe, rebuilt).
+
+    The shared builder for named apps: mac-apps' own jobs, and Personal Agent's pa-app.
+      apps_dir       folder for the app (default APPS)
+      bundle_id      default <MAC_APPS_BUNDLE_PREFIX>.<slug>
+      sign_identity  codesign identity (default MAC_APPS_SIGN_IDENTITY); ad-hoc if it can't be used
+      resources      {"file name": text} written to Contents/Resources (mode 600), or a callable(app_dir)
+                     that adds files before signing (e.g. a copy of a script's folder)
+      extra_config   more keys for Contents/Resources/mac-apps.json
+      reuse          keep an identical existing build (a rebuild changes an ad-hoc signature, and macOS
+                     then forgets the app's privacy grants). False = always rebuild
+      force          replace an existing app this tool didn't build
+
+    The new app is built and signed in a temporary folder next to the old one and only swapped in once its
+    signature verifies, so a failed build never leaves a half-built or broken-seal app behind."""
     if not argv:
         die("nothing to run")
     argv = list(argv)
@@ -343,9 +396,12 @@ def build_app(name, argv, bundle_id=None, path_env=None, force=False):
         argv[0] = found
     if not os.access(argv[0], os.X_OK):
         die(f"{argv[0]} is not executable")
+    apps_dir = Path(apps_dir) if apps_dir else APPS
     bundle_id = bundle_id or f"{PREFIX}.{slug(name)}"
-    app, exe, cfg_path = app_paths(name)
-    cfg = {"tool": "agent-tools/mac-apps", "name": name, "bundle_id": bundle_id, "argv": argv}
+    app = apps_dir / f"{name}.app"
+    exe = app / "Contents" / "MacOS" / name
+    cfg_path = app / "Contents" / "Resources" / CONFIG_NAME
+    cfg = {"tool": "agent-tools/mac-apps", "name": name, "bundle_id": bundle_id, "argv": argv, **(extra_config or {})}
     if app.exists():
         old = None
         try:
@@ -354,39 +410,60 @@ def build_app(name, argv, bundle_id=None, path_env=None, force=False):
             pass
         if old is None and not force:
             die(f"{tilde(app)} exists and wasn't built by mac-apps; move it away (or pass --force)")
-        if old == cfg and exe.exists() and subprocess.run(["codesign", "--verify", str(app)],
-                                                          capture_output=True).returncode == 0:
+        if reuse and old == cfg and exe.exists() and verify_signature(app)[0]:
             return str(exe), False
-        shutil.rmtree(app)
     cc = have_cc()
     if not cc:
         die("needs the Xcode Command Line Tools for `cc`: run `xcode-select --install`, then retry")
-    (app / "Contents/MacOS").mkdir(parents=True)
-    (app / "Contents/Resources").mkdir(parents=True)
-    with tempfile.TemporaryDirectory() as t:
-        src = Path(t) / "launcher.c"
-        src.write_text(LAUNCHER_C.replace("@ARGV@", "".join(cstr(a) + ", " for a in argv)))
-        r = subprocess.run([cc, "-O2", "-Wall", "-o", str(exe), str(src)], capture_output=True, text=True)
-        if r.returncode:
-            shutil.rmtree(app, ignore_errors=True)
-            die(f"cc failed:\n{r.stderr}")
-    with open(app / "Contents/Info.plist", "wb") as f:
-        plistlib.dump({"CFBundleName": name, "CFBundleDisplayName": name, "CFBundleIdentifier": bundle_id,
-                       "CFBundleExecutable": name, "CFBundlePackageType": "APPL", "CFBundleVersion": "1",
-                       "CFBundleShortVersionString": "1.0", "LSUIElement": True, "LSBackgroundOnly": True}, f)
-    cfg_path.write_text(json.dumps(cfg, indent=1) + "\n")
-    os.chmod(cfg_path, 0o600)          # argv may carry a secret inline (it's local; plists already do)
-    sign(app, bundle_id)
-    subprocess.run(["xattr", "-cr", str(app)], capture_output=True)
+    apps_dir.mkdir(parents=True, exist_ok=True)
+    tmp = apps_dir / f".{name}.app.building-{os.getpid()}"
+    shutil.rmtree(tmp, ignore_errors=True)
+    try:
+        (tmp / "Contents/MacOS").mkdir(parents=True)
+        (tmp / "Contents/Resources").mkdir(parents=True)
+        with tempfile.TemporaryDirectory() as t:
+            src = Path(t) / "launcher.c"
+            src.write_text(LAUNCHER_C.replace("@ARGV@", "".join(cstr(a) + ", " for a in argv)))
+            # through xcrun, so cc gets the SDK (headers) whichever Python runs this (Homebrew's doesn't set SDKROOT)
+            r = subprocess.run(["xcrun", "cc", "-O2", "-Wall", "-o", str(tmp / "Contents/MacOS" / name), str(src)],
+                               capture_output=True, text=True)
+            if r.returncode:
+                raise RuntimeError(f"cc failed:\n{r.stderr}")
+        with open(tmp / "Contents/Info.plist", "wb") as f:
+            plistlib.dump({"CFBundleName": name, "CFBundleDisplayName": name, "CFBundleIdentifier": bundle_id,
+                           "CFBundleExecutable": name, "CFBundlePackageType": "APPL", "CFBundleVersion": "1",
+                           "CFBundleShortVersionString": "1.0", "LSUIElement": True, "LSBackgroundOnly": True}, f)
+        files = {CONFIG_NAME: json.dumps(cfg, indent=1) + "\n"}
+        if isinstance(resources, dict):
+            files.update(resources)
+        for fname, text in files.items():
+            fp = tmp / "Contents/Resources" / fname
+            fp.write_text(text)
+            os.chmod(fp, 0o600)        # argv may carry a secret inline (it's local; plists already do)
+        if callable(resources):
+            resources(tmp)
+        subprocess.run(["xattr", "-cr", str(tmp)], capture_output=True)   # codesign rejects xattr "detritus"
+        sign(tmp, bundle_id, sign_identity)
+    except Exception as e:
+        shutil.rmtree(tmp, ignore_errors=True)
+        die(f"building {name}.app failed: {e}")
+    old_dir = apps_dir / f".{name}.app.old-{os.getpid()}"
+    if app.exists():
+        os.rename(app, old_dir)
+    os.rename(tmp, app)
+    shutil.rmtree(old_dir, ignore_errors=True)
+    good, msg = verify_signature(app)       # the bundle path is part of nothing signed, but check anyway
+    if not good:
+        die(f"{tilde(app)}: signature doesn't verify after install: {msg[:200]}")
     return str(exe), True
 
 
 def probe(exe, paths, timeout=20):
     """Run the launcher in --probe mode from launchd (so macOS attributes the access to the app, not
-    to this terminal). Returns (all_ok, output). Only for apps built by mac-apps: other launchers
-    (e.g. pa-app's) would pass --probe through to the program they run."""
+    to this terminal). Returns (all_ok, output). Only for launchers built by this tool: older ones
+    (e.g. pa-app's before it used this builder) would pass --probe through to the program they run."""
     info = app_info(exe)
-    if not info or info["kind"] != "mac-apps":
+    if not info or not info["probe_ok"]:
         return False, "not a mac-apps launcher; not probing"
     label = f"local.mac-apps.probe.{slug(info['name'])}.{os.getpid()}"
     STATE.mkdir(parents=True, exist_ok=True)
@@ -440,6 +517,10 @@ def classify(label, inner):
         return None
     if "stuck_watch" in j or "stuck-watch" in label:
         return "stuck-watch"
+    if "sync_ai_sessions" in j or "sync-ai-sessions" in j or label.endswith(("sync-ai-sessions", "ai-session-sync")):
+        return "sync-ai-sessions"
+    if "mcp-tools" in j or label.endswith(("mcp-tools", "agent-tools-mcp")):
+        return "mcp-tools"
     if "cptr-watchdog" in j or ("watchdog" in label and "cptr" in label):
         return "watchdog"
     if label in ("com.cptr.run", "com.sandesh.cptr") or any(os.path.basename(x) == "cptr" for x in inner) \
@@ -451,7 +532,7 @@ def classify(label, inner):
 
 
 def detect():
-    found = {"cptr": [], "watchdog": [], "stuck-watch": []}
+    found = {k: [] for k in KINDS}
     for p in sorted(AGENTS.glob("*.plist")):
         try:
             job = load_plist(p)
@@ -701,7 +782,7 @@ def describe(kind, j, rows):
         ok(f"already named: \"{info['name']}\" ({info['bundle_id']}, built by {by}, {tilde(info['app'])})")
         if kind == "cptr":
             g = fda_granted_to(info["bundle_id"], rows)
-            if info["kind"] == "mac-apps":
+            if info["probe_ok"]:
                 good, text = probe(info["exe"], fda_paths())
                 (ok if good else note)("Full Disk Access: " + ("works (probe as the app read " + TCC_DB + ")" if good
                                                                 else "probe FAILED: " + text.replace("\n", "; ")))
@@ -719,7 +800,7 @@ def describe(kind, j, rows):
             print(f"      point ProgramArguments at {tilde(exe)} (label/env/workdir/logs/KeepAlive kept),")
             print("      restart detached and roll back unless health + a protected-path probe pass")
         else:
-            print(f"      back up the plist, point ProgramArguments at the launcher, reload (no Full Disk Access needed)")
+            print("      back up the plist, point ProgramArguments at the launcher, reload (no Full Disk Access needed)")
 
 
 def check(found=None):
@@ -730,10 +811,10 @@ def check(found=None):
     cc = have_cc()
     (ok if cc else note)(f"cc: {cc}" if cc else "no Command Line Tools: `xcode-select --install` (needed to build)")
     rows = tcc_rows()
-    for kind, title in (("cptr", "cptr"), ("watchdog", "cptr watchdog"), ("stuck-watch", "Stuck Watch")):
-        print(f"\n== {title} ==")
+    for kind in KINDS:
+        print(f"\n== {TITLES[kind]} ==")
         if not found[kind]:
-            note("no LaunchAgent found" + (" (install it with agent-tools/" + kind + "/install.sh)" if kind != "cptr" else ""))
+            note("no LaunchAgent found" + (f" (install it with agent-tools/{INSTALLERS[kind]}/install.sh)" if kind != "cptr" else ""))
             continue
         for j in found[kind]:
             describe(kind, j, rows)
@@ -769,12 +850,13 @@ def wrapped_job(j, exe):
 
 
 def wrap_simple(kind, found):
-    """Watchdog / Stuck Watch: no Full Disk Access needed; wrap, reload, verify, else roll back."""
+    """Watchdog, Stuck Watch, session sync, mcp-tools: no Full Disk Access needed; wrap, reload, verify,
+    else roll back."""
     j = pick(found, kind)
     name = NAMES[kind]
     print(f"\n== {name} ==")
     if not j:
-        note(f"no LaunchAgent found; install it first (agent-tools/{kind if kind != 'watchdog' else 'cptr-watchdog'}/install.sh)")
+        note(f"no LaunchAgent found; install it first (agent-tools/{INSTALLERS[kind]}/install.sh)")
         return 0
     if j["app"]:
         ok(f"already named \"{j['app']['name']}\" ({j['app']['bundle_id']}); nothing to do")
@@ -985,13 +1067,15 @@ def _switch(mode, statefile):
             log(f"  resumed watchdog {w['label']}", quiet=True)
 
 
-def rollback(found):
-    """Restore the newest backup of every LaunchAgent that currently runs a mac-apps launcher."""
+def rollback(found, kinds=None):
+    """Restore the newest backup of every LaunchAgent (of `kinds`, default all) that currently runs a
+    mac-apps launcher. cptr goes last and detached."""
     if not BACKUPS.is_dir():
         print("nothing to roll back (no backups)")
         return 0
     rc = 0
-    for kind in ("watchdog", "stuck-watch", "cptr"):
+    order = [k for k in KINDS if k != "cptr"] + ["cptr"]
+    for kind in [k for k in order if not kinds or k in kinds]:
         for j in found[kind]:
             if not j["app"] or j["app"]["kind"] != "mac-apps":
                 if j["app"]:
@@ -1029,11 +1113,11 @@ def main(argv):
         return _switch(argv[1], argv[2])
     if cmd == "build":
         if len(argv) < 2 or "--" not in argv:
-            die('usage: build "<Name>" [--bundle-id ID] [--force] -- <argv...>')
+            die('usage: build "<Name>" [--bundle-id ID] [--force] [--rebuild] -- <argv...>')
         i = argv.index("--")
         opts, run = argv[2:i], argv[i + 1:]
         bid = opts[opts.index("--bundle-id") + 1] if "--bundle-id" in opts else None
-        exe, rebuilt = build_app(argv[1], run, bid, force="--force" in opts)
+        exe, rebuilt = build_app(argv[1], run, bid, force="--force" in opts, reuse="--rebuild" not in opts)
         print(f"{'built' if rebuilt else 'unchanged'}: {exe}")
         return 0
     if cmd == "probe":
@@ -1044,8 +1128,11 @@ def main(argv):
         return 0 if good else 1
     found = detect()
     if cmd == "--rollback":
-        return rollback(found)
-    if cmd in ("--watchdog", "--stuck-watch"):
+        bad = [k for k in argv[1:] if k not in KINDS]
+        if bad:
+            die(f"unknown kind(s) {', '.join(bad)}; choose from {', '.join(KINDS)}")
+        return rollback(found, argv[1:] or None)
+    if cmd[2:] in KINDS and cmd[2:] != "cptr":
         rc = wrap_simple(cmd[2:], found)
         stale_report(detect())
         return rc

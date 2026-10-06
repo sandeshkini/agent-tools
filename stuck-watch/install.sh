@@ -81,6 +81,11 @@ if [ -d "$PA_APP" ]; then
   echo "\"Stuck Watch\" is managed by pa-app on this Mac: edit the code in place, then"
   echo "  launchctl kickstart -k gui/$UID_/$PA_LABEL   (see personal-agent/systems/APPS.md)"; exit 0
 fi
+# Same if mac-apps wrapped this LaunchAgent in a named app: rewriting the plist would undo that.
+if plutil -extract ProgramArguments.0 raw "$PLIST" 2>/dev/null | grep -q '\.app/Contents/MacOS/'; then
+  echo "$LABEL runs as a named app (agent-tools/mac-apps); not rewriting it. The app runs the deployed copy:"
+  echo "  cp \"$HERE/stuck_watch.py\" \"$DEPLOY_DIR/\" && launchctl kickstart -k gui/$UID_/$LABEL"; exit 0
+fi
 
 echo "== deploy + venv =="
 command -v uv >/dev/null || { echo "uv required — https://docs.astral.sh/uv/ (brew install uv)"; exit 1; }

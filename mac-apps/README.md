@@ -67,18 +67,39 @@ still works, but your session ends at the restart. The result goes to the log an
 |---|---|
 | `--check` (default) | finds cptr's LaunchAgent (any label whose command runs `cptr`), with its command, port (from what it listens on, `--port`, or `CPTR_PORT`), env names, working folder and logs. Also finds the watchdog and Stuck Watch jobs. Says "already named" or what would change, checks cptr.app's Full Disk Access and lists stale grants. **Changes nothing** |
 | `--cptr` | the flow above |
-| `--watchdog`, `--stuck-watch` | wrap that job |
+| `--watchdog`, `--stuck-watch`, `--sync-ai-sessions`, `--mcp-tools` | wrap that job |
 | `--all` | Stuck Watch, watchdog, then cptr last |
-| `--rollback` | restores the newest backup (`~/Library/LaunchAgents/.mac-apps-backup/`) of each job that currently runs a mac-apps launcher, and restarts it (cptr detached, with the watchdog paused). The apps themselves are left in place |
-| `build "<Name>" [--bundle-id ID] -- <cmd…>` | build any named app whose launcher runs `cmd…` |
+| `--rollback [KIND…]` | restores the newest backup (`~/Library/LaunchAgents/.mac-apps-backup/`) of each job (or just `cptr`, `watchdog`, `stuck-watch`, `sync-ai-sessions`, `mcp-tools`) that currently runs a mac-apps launcher, and restarts it (cptr detached, with the watchdog paused). The apps themselves are left in place |
+| `build "<Name>" [--bundle-id ID] [--rebuild] -- <cmd…>` | build any named app whose launcher runs `cmd…` (an identical existing build is kept unless `--rebuild`) |
 | `probe "<Name>" <path…>` | open paths as that app (through launchd, so macOS attributes it to the app, not your terminal) |
 
 Jobs already wrapped (by mac-apps, or by Personal Agent's `pa-app`) are reported as "already named"
-and left alone. Rebuilding an unchanged app is skipped, so its grants survive re-runs.
+and left alone. Rebuilding an unchanged app is skipped, so its grants survive re-runs. The Stuck Watch
+and watchdog installers also leave a plist alone once it runs a named app.
+
+`agent-tools/setup.sh` runs these steps per machine profile (components `named-apps` and `cptr-app`).
 
 Overrides (env): `MAC_APPS_DIR`, `MAC_APPS_BUNDLE_PREFIX` (default `local.agent-apps`),
-`MAC_APPS_SIGN_IDENTITY` (a code-signing identity in your Keychain; default ad-hoc),
+`MAC_APPS_SIGN_IDENTITY` (a code-signing identity in your Keychain; default ad-hoc; used only if
+it signs within 30 s),
 `MAC_APPS_CPTR_LABEL` (if more than one job runs cptr), `MAC_APPS_CPTR_PORT`.
+
+## Building and signing (shared with pa-app)
+
+`build_app()` in `mac_apps.py` is the one named-app builder on every Mac. Personal Agent's `pa-app`
+imports it for its own apps; it keeps its own folder, bundle ids and `pa-app.json`. For each app it:
+
+- compiles the launcher (below) through `xcrun cc`, writes `Info.plist` and `Contents/Resources/mac-apps.json`
+- signs with `MAC_APPS_SIGN_IDENTITY` (or the caller's identity) if that works within 30 s. A stable
+  local identity keeps privacy grants across rebuilds. Otherwise (missing identity, or a Keychain
+  prompt nobody answers) it signs ad-hoc, after deleting any `*.cstemp` a killed codesign left behind.
+  Sealing that leftover and then losing it breaks the seal ("a sealed resource is missing")
+- verifies the result with `codesign --verify --deep --strict`
+- builds in a temporary folder beside the app and swaps it in only once the signature verifies.
+  A failed build never leaves a half-built or broken-seal app, and the old app stays as it was
+
+An app with `mac-apps.json` has this launcher, so it understands `--probe`. Apps built by older pa-app
+versions don't. They're reported as named apps but never probed, and nothing rebuilds them unasked.
 
 ## The launcher
 

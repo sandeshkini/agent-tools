@@ -23,13 +23,19 @@ Darwin)
   # scope and is already where cptr/newt themselves run from successfully
   # under launchd on this machine, so this mirrors proven-working precedent.
   # The repo copy stays the source of truth; re-run install.sh after editing it.
+  PLIST="$HOME/Library/LaunchAgents/com.cptr.watchdog.plist"
+  # If mac-apps wrapped this job in a named app, rewriting the plist would undo that; just refresh the copy.
+  if plutil -extract ProgramArguments.0 raw "$PLIST" 2>/dev/null | grep -q '\.app/Contents/MacOS/'; then
+    cp "$SCRIPT" "$HOME/.local/bin/cptr-watchdog.sh"
+    echo "com.cptr.watchdog runs as a named app (agent-tools/mac-apps): updated ~/.local/bin/cptr-watchdog.sh, plist left alone"
+    exit 0
+  fi
   mkdir -p "$HOME/.local/bin"
   DEPLOYED="$HOME/.local/bin/cptr-watchdog.sh"
   cp "$SCRIPT" "$DEPLOYED"
   chmod +x "$DEPLOYED"
   xattr -d com.apple.provenance "$DEPLOYED" 2>/dev/null || true
 
-  PLIST="$HOME/Library/LaunchAgents/com.cptr.watchdog.plist"
   cat > "$PLIST" <<PL
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

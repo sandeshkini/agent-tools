@@ -7,14 +7,15 @@
 #   ./install.sh --cptr        wrap cptr (asks you to grant Full Disk Access first; needs you at the Mac)
 #   ./install.sh --watchdog    wrap the cptr watchdog
 #   ./install.sh --stuck-watch wrap Stuck Watch
-#   ./install.sh --all         all three (cptr last: its restart can end the session you run this from)
-#   ./install.sh --rollback    restore the LaunchAgents mac-apps changed
-#   ./install.sh build "<Name>" [--bundle-id ID] -- <command...>   build any named app
+#   ./install.sh --sync-ai-sessions | --mcp-tools   wrap those jobs
+#   ./install.sh --all         Stuck Watch, watchdog, cptr (cptr last: its restart can end the session you run this from)
+#   ./install.sh --rollback [KIND...]   restore the LaunchAgents mac-apps changed (KIND: cptr, watchdog, ...)
+#   ./install.sh build "<Name>" [--bundle-id ID] [--rebuild] -- <command...>   build any named app
 #   ./install.sh probe "<Name>" <path...>                          open paths as that app
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
-case "${1:-}" in -h|--help) sed -n 2,14p "$0"; exit 0 ;; esac
+case "${1:-}" in -h|--help) sed -n 2,15p "$0"; exit 0 ;; esac
 [ "$(uname -s)" = "Darwin" ] || { echo "mac-apps is macOS only"; exit 1; }
 
 # The launcher is a ~60-line C program compiled on this Mac, and the installer uses the Command
