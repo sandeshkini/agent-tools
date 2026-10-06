@@ -61,7 +61,7 @@ Environment variables override `~/.config/stuck-watch/config` (`KEY=VALUE` lines
 | `STUCK_WATCH_MINUTES` | `3` | file operations idle this long are stuck |
 | `STUCK_WATCH_OTHER_MINUTES` | `15` | any other agent command |
 | `STUCK_WATCH_PROMPT_MINUTES` | `2` | TCC prompt / dialog unanswered this long |
-| `STUCK_WATCH_REALERT_MINUTES` | `30` | repeat interval while an issue persists |
+| `STUCK_WATCH_REALERT_MINUTES` | `30` | first repeat while an issue persists; each later repeat waits twice as long (max 1 a day) |
 | `STUCK_WATCH_INTERVAL` | `60` | seconds between scans |
 | `STUCK_WATCH_CPU_EPSILON` | `0.05` | CPU seconds per interval that still count as idle |
 | `STUCK_WATCH_IGNORE` | `sleep`, `tail -f`, `less`, `ssh`, `tmux`, `log stream`, … | regex on the command line (program as basename) for things meant to sit idle |

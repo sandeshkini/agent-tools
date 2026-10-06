@@ -183,7 +183,7 @@ def notify(message, priority=4):
 
 
 class Alerts:
-    """One notification per distinct issue; again after REALERT_MIN if it's still there."""
+    """One notification per distinct issue; repeats back off while it's still there."""
 
     def __init__(self):
         self.sent = {}
@@ -193,13 +193,19 @@ class Alerts:
             pass
 
     def fire(self, key, message, priority=4):
+        """Alert once; repeat while it lasts with a doubling gap (30m, 1h, 2h, 4h ... max a day),
+        so an issue nobody can act on right away doesn't ping the phone every 30 minutes."""
         now = time.time()
-        last = self.sent.get(key)
-        if last and now - last < REALERT_MIN * 60:
-            return False
-        log("ALERT" if not last else "REALERT", f"[{key}] {message}")
+        rec = self.sent.get(key)
+        if isinstance(rec, (int, float)):        # old state format: just the last time
+            rec = {"last": rec, "n": 1}
+        if rec:
+            gap = min(REALERT_MIN * 60 * (2 ** (rec["n"] - 1)), 24 * 3600)
+            if now - rec["last"] < gap:
+                return False
+        log("ALERT" if not rec else "REALERT", f"[{key}] {message}")
         notify(message, priority)
-        self.sent[key] = now
+        self.sent[key] = {"last": now, "n": (rec["n"] + 1) if rec else 1}
         self.save()
         return True
 
