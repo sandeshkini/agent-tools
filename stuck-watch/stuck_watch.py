@@ -99,6 +99,10 @@ FILE_OPS = {
     "plutil", "defaults", "textutil", "sips", "qlmanage", "security", "tccutil", "hdiutil",
     "diskutil", "mkdir", "rmdir", "readlink", "realpath", "wc", "sort", "pdftotext", "soffice",
 }
+# Commands that sit at the end of a pipe (`cmd | tail -3`) wait on the command feeding
+# them, not on a file. While a sibling in the same pipeline is alive, judge that one instead.
+PIPE_FILTERS = {"tail", "head", "grep", "rg", "wc", "sort", "uniq", "tee", "awk", "sed", "cut",
+                "jq", "less", "more", "tr", "column", "xargs"}
 PROTECTED = re.compile(r"(Downloads|Desktop|Documents|Library/Mobile Documents|iCloud|/Volumes/|"
                        r"Pictures|Photos|Movies|Music|Library/Mail|Library/Messages|Library/Safari)")
 
@@ -392,6 +396,11 @@ class StuckCommands:
                 continue
             if any(c in candidates and not procs[c]["state"].startswith("Z") for c in kids.get(pid, [])):
                 continue   # report the deepest process: that's the one actually waiting
+            if command_name(p["cmd"]) in PIPE_FILTERS and any(
+                s != pid and s in procs and not procs[s]["state"].startswith("Z")
+                for s in kids.get(p["ppid"], [])
+            ):
+                continue   # end of a pipe; its feeder is alive and is judged on its own
             k = (pid, p["cmd"])
             live.add(k)
             prev = self.idle_since.get(k)
