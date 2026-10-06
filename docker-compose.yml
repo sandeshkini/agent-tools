@@ -3,6 +3,8 @@ name: agent-tools
 #   • artifacts  — the publish board          → artifacts.kingdomofluna.com (write: push.artifacts.kingdomofluna.com)
 #   • ntfy       — the phone push bus          → ntfy.kingdomofluna.com  (host :8095)
 #   • mcp-tools  — shared MCP: publish_artifact + notify (cptr consumes it at 127.0.0.1:8009/mcp)
+#   • memory     — shared agent memory: Graphiti (temporal knowledge graph) + FalkorDB, MCP at
+#                  127.0.0.1:8012/mcp/ (see memory/README.md). Other machines reach it over SSH.
 # `apps` network name is legacy (from when Traefik fronted everything on apps.kingdomofluna.com,
 # now retired) but still the real external Docker network these services share — don't rename it,
 # nothing here needs a matching hostname anymore, it's just the network identifier.
@@ -77,6 +79,33 @@ services:
       # process with full local filesystem access.
       - /tmp:/tmp:ro
     networks: [default, apps]
+
+  memory:
+    # Graphiti MCP server + FalkorDB in one container (official image, pinned).
+    # Facts carry valid-from/valid-until; a contradicting fact invalidates the old one instead of
+    # deleting it, and every fact links back to the episode (raw text) it came from.
+    image: zepai/knowledge-graph-mcp:1.1.0-graphiti-0.30.1
+    container_name: memory
+    restart: unless-stopped
+    environment:
+      OPENAI_API_KEY: "${OPENROUTER_API_KEY}"                   # OpenRouter, via the OpenAI-compatible client
+      OPENAI_API_URL: "https://openrouter.ai/api/v1"
+      MODEL_NAME: "${MEMORY_MODEL:-google/gemini-3.8-flash}"   # fact extraction; must support structured outputs
+      EMBEDDER_MODEL: "openai/text-embedding-3-small"
+      FALKORDB_URI: "redis://localhost:6379"
+      GRAPHITI_GROUP_ID: "${MEMORY_GROUP:-personal}"
+      SEMAPHORE_LIMIT: "4"                                      # concurrent LLM calls per write
+      BROWSER: "1"                                              # FalkorDB graph browser on :3000
+      CONFIG_PATH: "/app/mcp/config/config.yaml"
+    ports:
+      # localhost only: the MCP server has no auth of its own. aibo-mac reaches it over an SSH
+      # tunnel (cos-node --tunnel 8012=beastblaster@192.168.0.146:8012).
+      - "127.0.0.1:8012:8000"                                   # MCP (streamable HTTP) at /mcp/
+      - "127.0.0.1:3012:3000"                                   # FalkorDB browser (graph explorer)
+    volumes:
+      - ./memory/config.yaml:/app/mcp/config/config.yaml:ro
+      - ${MEMORY_DATA:-./memory/data}:/var/lib/falkordb/data
+    networks: [default]
 
 networks:
   default:

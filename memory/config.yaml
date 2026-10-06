@@ -1,0 +1,70 @@
+# Graphiti MCP server config for the shared agent memory (agent-tools/memory).
+# Mounted over the image's /app/mcp/config/config.yaml. Values in ${…} come from the
+# container environment (docker-compose.yml → .env). See memory/README.md.
+
+server:
+  transport: "http"
+  host: "0.0.0.0"          # inside the container; the host port is published on 127.0.0.1 only
+  port: 8000
+
+llm:
+  # OpenRouter through the OpenAI-compatible client (a non-OpenAI api_url makes Graphiti use its
+  # generic chat-completions client). The model must support structured outputs.
+  provider: "openai"
+  model: ${MODEL_NAME:google/gemini-3.8-flash}
+  max_tokens: 8192
+  providers:
+    openai:
+      api_key: ${OPENAI_API_KEY}
+      api_url: ${OPENAI_API_URL:https://openrouter.ai/api/v1}
+      organization_id: ""
+
+embedder:
+  provider: "openai"
+  model: ${EMBEDDER_MODEL:openai/text-embedding-3-small}
+  dimensions: 1536
+  providers:
+    openai:
+      api_key: ${OPENAI_API_KEY}
+      api_url: ${OPENAI_API_URL:https://openrouter.ai/api/v1}
+      organization_id: ""
+
+database:
+  provider: "falkordb"
+  providers:
+    falkordb:
+      uri: ${FALKORDB_URI:redis://localhost:6379}
+      password: ${FALKORDB_PASSWORD:}
+      database: ${FALKORDB_DATABASE:default_db}
+
+graphiti:
+  # One graph per memory space. "personal" for Sandesh's personal agents; the work instance gets
+  # its own group (and, later, its own server).
+  group_id: ${GRAPHITI_GROUP_ID:personal}
+  episode_id_prefix: ""
+  user_id: "sandesh"
+  entity_types:
+    - name: "Preference"
+      description: "Sandesh's preferences, choices, opinions or ways of working (PRIORITIZE over most other types)"
+    - name: "Decision"
+      description: "A decision Sandesh (or an agent on his behalf) made: what was decided, and why if stated"
+    - name: "Commitment"
+      description: "Something someone promised or plans to do: who, what, and by when if stated"
+    - name: "System"
+      description: "A machine, service, app, repo or agent in Sandesh's setup (aibo-mac, aibo-linux, cptr, LifeOS, Frigate, …)"
+    - name: "Requirement"
+      description: "Specific needs, features, or functionality that must be fulfilled"
+    - name: "Procedure"
+      description: "Standard operating procedures and sequential instructions"
+    - name: "Person"
+      description: "A person in Sandesh's life or work"
+    - name: "Organization"
+      description: "Companies, institutions, groups, or formal entities"
+    - name: "Location"
+      description: "Physical or virtual places where activities occur"
+    - name: "Event"
+      description: "Time-bound activities, occurrences, or experiences"
+    - name: "Document"
+      description: "Information content in various forms (notes, reports, files, etc.)"
+    - name: "Topic"
+      description: "Subject of conversation, interest, or knowledge domain (use as last resort)"

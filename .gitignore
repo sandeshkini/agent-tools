@@ -8,3 +8,4 @@ node_modules/
 **/.venv/
 *.pyc
 .DS_Store
+memory/data/
