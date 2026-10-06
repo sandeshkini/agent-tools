@@ -38,6 +38,9 @@ systemd `--user` timer (`cptr-watchdog.timer` + `.service`). Idempotent; safe to
 Defaults: macOS `8000` (aibo-mac's `cptr` port), Linux `8899` (aibo's `--port` flag — see
 `aibo-server/Services/cptr/README.md`). Override with `CPTR_WATCHDOG_PORT` if your install differs
 — set it as an `EnvironmentVariables` entry in the plist, or `Environment=` in the systemd service.
+On macOS the job it watches is `com.cptr.run`; a Mac whose cptr LaunchAgent has another label
+(e.g. `com.sandesh.cptr`) sets `CPTR_WATCHDOG_LABEL` the same way. `mac-apps/install.sh --check`
+flags a watchdog whose label/port don't match the detected cptr job.
 
 ## Uninstall
 

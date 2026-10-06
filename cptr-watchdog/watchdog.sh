@@ -22,9 +22,9 @@ mkdir -p "$(dirname "$LOG")"
 case "$(uname -s)" in
 Darwin)
   PORT="${PORT:-8000}"
-  LABEL="com.cptr.run"
+  LABEL="${CPTR_WATCHDOG_LABEL:-com.cptr.run}"   # e.g. com.sandesh.cptr on a Mac that names it so
   DOMAIN="gui/$(id -u)"
-  PLIST="$HOME/Library/LaunchAgents/com.cptr.run.plist"
+  PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 
   if ! launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1; then
     log "[macos] job missing — bootstrapping"

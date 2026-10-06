@@ -22,6 +22,7 @@ systemd (Linux), not in a container.
 | `cptr-watchdog` | periodic self-heal for cptr's own service — re-registers it if the launchd job/systemd unit was deregistered entirely (not just crashed; `KeepAlive`/`Restart=always` don't cover that), restarts it if registered but unhealthy | `cptr-watchdog/install.sh` |
 | `computer-use` | cua-driver (desktop apps) + agent-browser (web pages) + the optional Agent Chrome (CDP :9333), skills and MCP wiring, for any Mac. What aibo-mac runs | `computer-use/install.sh [--agent-chrome]`, then `cua-driver permissions grant` |
 | `stuck-watch` | notices agent commands silently stuck on a macOS permission prompt / unanswered dialog (idle agent commands, unanswered TCC prompts, password/permission windows) and sends one ntfy push per issue; read-only, never kills or clicks. Any Mac | `stuck-watch/install.sh [--check\|--uninstall]` |
+| `mac-apps` | runs cptr, the cptr watchdog and Stuck Watch as named apps (`cptr.app`, `cptr Watchdog.app`, `Stuck Watch.app`) so privacy lists show their names instead of python3.x/bash and cptr's Full Disk Access belongs to cptr alone; grants FDA first, switches detached, health-gated with rollback. Any Mac | `mac-apps/install.sh --check`, then `--all` (at the Mac) |
 | `mcp-tools` (host mode) | same `publish_artifact`/`notify` MCP as the Docker service above, for a machine with no Docker (thin client hitting aibo's shared board/bus over the public URLs, not the compose network) | `mcp-tools/install.sh` |
 
 See `cptr-watchdog/README.md`/`mcp-tools/README.md` — both carry
