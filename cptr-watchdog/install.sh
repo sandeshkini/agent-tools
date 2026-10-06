@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# On a Mac where this job is a named app (Personal Agent's bin/pa-app), don't create a second LaunchAgent.
+if [ -d "$HOME/Applications/Personal Agent/cptr Watchdog.app" ]; then
+  echo "\"cptr Watchdog\" is managed by pa-app on this Mac: personal-agent/bin/pa-app rebuild \"cptr Watchdog\""; exit 0
+fi
 # cptr-watchdog installer. Detects the OS and schedules watchdog.sh to run
 # every 60s (launchd StartInterval / systemd timer). Idempotent.
 set -euo pipefail
