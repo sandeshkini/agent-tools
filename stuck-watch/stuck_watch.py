@@ -750,7 +750,8 @@ def main():
             alerts.fire(key, message)
         # denials are one-off events; keep their dedupe entry until REALERT_MIN passes
         now = time.time()
-        live |= {k for k, t in alerts.sent.items() if k.startswith("tccdeny:") and now - t < REALERT_MIN * 60}
+        live |= {k for k, t in alerts.sent.items()
+                 if k.startswith("tccdeny:") and now - (t["last"] if isinstance(t, dict) else t) < REALERT_MIN * 60}
         alerts.forget_except(live)
         if once:
             if not issues:
