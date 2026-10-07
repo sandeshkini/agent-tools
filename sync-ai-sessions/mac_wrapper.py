@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-macOS wrapper around sync_ai_sessions.py (same folder; that file is the shared script, identical to
-the Linux server's copy -- edit sync logic there, not here).
+macOS wrapper around sync_ai_sessions.py (same folder; that file is the one shared script; aibo-linux
+runs the same file -- edit sync logic there, not here).
 
 On aibo-linux, the git commit+push for ai-memory is handled by a separate
 nightly backup.sh. aibo-mac has no equivalent always-on backup job, so this
@@ -23,8 +23,8 @@ from datetime import datetime
 from pathlib import Path
 
 HOME = Path.home()
-REPO = next((p for p in (HOME / "Documents" / "ai-memory", HOME / "Documents" / "personal" / "ai-memory")
-             if (p / ".git").is_dir()), HOME / "Documents" / "ai-memory")
+REPO = next((p for p in (HOME / "Documents" / "personal" / "ai-memory", HOME / "Documents" / "ai-memory")
+             if (p / ".git").is_dir()), HOME / "Documents" / "personal" / "ai-memory")
 SYNC_SCRIPT = Path(__file__).resolve().parent / "sync_ai_sessions.py"
 
 

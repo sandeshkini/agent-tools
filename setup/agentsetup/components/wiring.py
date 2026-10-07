@@ -6,6 +6,8 @@ Covers:
 - Skill links in ~/.claude/skills, ~/.config/opencode/skills, ~/.agents/skills (cptr, Codex) and
   ~/.gemini/config/skills (agy).
 - Helper commands linked into ~/.local/bin (fleet-secret, pa-secret, agy-ask, ui-shot).
+- Claude Code plugins ([plugins.*]): marketplace added, plugin installed and enabled at user scope.
+  Plugins not in the registry are reported, never uninstalled.
 
 The registry is the source of truth (Sandesh, 2026-10-07, D3).
 - MCP servers and skills that aren't in the registry are reported, not removed. The exception is a
@@ -122,6 +124,11 @@ class Wiring(Component):
     def load(self):
         reg = tomlmini.loads(self.registry_path().read_text())
         want_mcp, held, want_skills, want_bin, problems = {}, [], {}, {}, []
+        want_plugins = {}
+        for name, e in (reg.get("plugins") or {}).items():
+            if self.applies(e) and e.get("id"):
+                want_plugins[name] = {"id": e["id"], "marketplace": e.get("marketplace")}
+        self._want_plugins = want_plugins
         for key, e in (reg.get("mcp") or {}).items():
             if not self.applies(e):
                 continue
@@ -222,7 +229,8 @@ class Wiring(Component):
         except (OSError, ValueError) as ex:
             return {"error": f"registry: {ex}"}
         f = {"programs": {}, "want_mcp": want_mcp, "held": held, "want_skills": want_skills,
-             "want_bin": want_bin, "problems": problems, "managed_roots": [str(ctx.repo)]}
+             "want_bin": want_bin, "problems": problems, "managed_roots": [str(ctx.repo)],
+             "want_plugins": getattr(self, "_want_plugins", {}), "plugins": self.read_plugins()}
         pa = self.personal_agent()
         if pa:
             f["managed_roots"].append(str(pa))
@@ -254,6 +262,17 @@ class Wiring(Component):
             f["opencode_comments"] = has_comments(txt)
             f["opencode_inline_keys"] = sorted(set(re.findall(r'"apiKey"\s*:\s*"(?!\{env:)[^"]+"', txt))) != []
         return f
+
+    def read_plugins(self):
+        """Claude Code's installed plugins, enabled flags and known marketplace repos."""
+        if not self.installed("claude-code"):
+            return None
+        pd = self.ctx.home / ".claude/plugins"
+        inst = (host.read_json(pd / "installed_plugins.json") or {}).get("plugins") or {}
+        enabled = (host.read_json(self.ctx.home / ".claude/settings.json") or {}).get("enabledPlugins") or {}
+        repos = {(m.get("source") or {}).get("repo") or (m.get("source") or {}).get("url")
+                 for m in (host.read_json(pd / "known_marketplaces.json") or {}).values()}
+        return {"installed": sorted(inst), "enabled": enabled, "repos": sorted(r for r in repos if r)}
 
     # ------------------------------------------------------------------------------- plan
     @staticmethod
@@ -318,13 +337,31 @@ class Wiring(Component):
                 continue
             ops.append({"op": "link", "path": str(self.ctx.home / ".local/bin" / name), "target": target})
             actions.append(f"link ~/.local/bin/{name}")
+        cur_pl = f.get("plugins")
+        if f.get("want_plugins") and cur_pl is None:
+            notes.append("claude-code: not installed here, plugins skipped")
+        elif cur_pl is not None:
+            for name, w in f.get("want_plugins", {}).items():
+                if w.get("marketplace") and w["marketplace"] not in cur_pl["repos"]:
+                    ops.append({"op": "marketplace", "source": w["marketplace"]})
+                    actions.append(f"claude-code: add plugin marketplace {w['marketplace']}")
+                if w["id"] not in cur_pl["installed"]:
+                    ops.append({"op": "plugin", "id": w["id"]})
+                    actions.append(f"claude-code: install plugin {w['id']}")
+                elif cur_pl["enabled"].get(w["id"]) is False:
+                    ops.append({"op": "plugin-enable", "id": w["id"]})
+                    actions.append(f"claude-code: enable plugin {w['id']}")
+            wanted = {w["id"] for w in f.get("want_plugins", {}).values()}
+            extra = sorted(set(cur_pl["installed"]) - wanted)
+            if extra:
+                notes.append(f"claude-code: plugin(s) not in the registry: {', '.join(extra)} (add them there or uninstall them)")
         if f.get("opencode_inline_keys"):
             notes.append(f"{f['opencode_file']} has an API key written into it; use \"{{env:NAME}}\" (D4)")
         if ops and f.get("opencode_comments") and any(o.get("kind") == "opencode-json" for o in ops):
             notes.append(f"{f['opencode_file']} has comments; rewriting it drops them (a backup is kept)")
-        n_mcp = len(f["want_mcp"]); n_sk = len(f["want_skills"])
+        n_mcp = len(f["want_mcp"]); n_sk = len(f["want_skills"]); n_pl = len(f.get("want_plugins") or {})
         if not ops:
-            return Plan(OK, f"{n_mcp} MCP server(s), {n_sk} skill(s) and {len(f['want_bin'])} command(s) match the registry", notes=notes)
+            return Plan(OK, f"{n_mcp} MCP server(s), {n_sk} skill(s), {n_pl} plugin(s) and {len(f['want_bin'])} command(s) match the registry", notes=notes)
         return Plan(CHANGE, f"{len(ops)} change(s) to match the registry", actions=actions, notes=notes, data={"ops": ops})
 
     # ------------------------------------------------------------------------------ apply
@@ -397,6 +434,16 @@ class Wiring(Component):
                     self.ctx.say(f"      {p} exists and isn't a link; skipped"); ok = False; continue
                 p.symlink_to(o["target"])
                 self.ctx.say(f"      {p} -> {o['target']}")
+            elif o["op"] in ("marketplace", "plugin", "plugin-enable"):
+                claude = host.which("claude") or str(self.ctx.home / ".local/bin/claude")
+                cmd = {"marketplace": [claude, "plugin", "marketplace", "add", o.get("source", "")],
+                       "plugin": [claude, "plugin", "install", o.get("id", ""), "-s", "user"],
+                       "plugin-enable": [claude, "plugin", "enable", o.get("id", ""), "-s", "user"]}[o["op"]]
+                r = self.ctx.capture(cmd, timeout=180)
+                good = r is not None and r.returncode == 0
+                msg = "" if r is None else (r.stderr or r.stdout).strip().splitlines()[-1:]
+                self.ctx.say(f"      claude-code: {' '.join(cmd[2:])} {'ok' if good else 'FAILED: ' + ' '.join(msg)}")
+                ok &= good
             elif o["op"] == "unlink":
                 p = Path(o["path"])
                 if p.is_symlink():

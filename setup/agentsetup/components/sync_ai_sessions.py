@@ -1,8 +1,8 @@
 """sync-ai-sessions: exports Claude Code / OpenCode sessions into the ai-memory repo every 15 min.
 
-macOS: sync-ai-sessions/install.sh (LaunchAgent), or any job already doing it (a named app, or a
-hand-made LaunchAgent). Linux: agent-tools has no installer; the profile can name one (`installer`),
-otherwise a missing timer is reported for a person to set up.
+sync-ai-sessions/install.sh does both: macOS a LaunchAgent (or any job already doing it: a named app,
+or a hand-made LaunchAgent), Linux a systemd --user timer. A profile can still name its own
+`installer` command for Linux.
 """
 from ..core import Component
 from .. import host
@@ -10,7 +10,7 @@ from ._jobs import plan_launch_agent, plan_systemd
 
 LABEL = "com.sandesh.sync-ai-sessions"
 TIMER = "sync-ai-sessions.timer"
-REPO_PLACES = ("Documents/ai-memory", "Documents/personal/ai-memory")
+REPO_PLACES = ("Documents/personal/ai-memory", "Documents/ai-memory")
 
 
 class SyncAiSessions(Component):
@@ -28,10 +28,8 @@ class SyncAiSessions(Component):
 
     def plan(self, f):
         if self.ctx.os == "linux":
-            inst = self.cfg.get("installer")
-            return plan_systemd(f["timer"], TIMER, f"run {inst}" if inst else None,
-                                "agent-tools has no Linux installer for it; set it up by hand or set "
-                                "[components.sync-ai-sessions] installer in the profile")
+            inst = self.cfg.get("installer") or "sync-ai-sessions/install.sh"
+            return plan_systemd(f["timer"], TIMER, f"run {inst}", None)
         blockers = []
         if not f["repo"]:
             blockers.append("clone the ai-memory repo to ~/Documents/personal/ai-memory first")
@@ -54,5 +52,7 @@ class SyncAiSessions(Component):
                 ctx.say(f"      launchctl bootstrap failed: {err}")
             return good
         if ctx.os == "linux":
-            return ctx.run(["sh", "-c", ctx.expand(self.cfg["installer"])]) == 0
+            if self.cfg.get("installer"):
+                return ctx.run(["sh", "-c", ctx.expand(self.cfg["installer"])]) == 0
+            return ctx.run(["bash", str(ctx.repo / "sync-ai-sessions/install.sh")]) == 0
         return ctx.run([ctx.repo / "sync-ai-sessions/install.sh"]) == 0

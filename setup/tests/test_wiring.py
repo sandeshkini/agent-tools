@@ -60,6 +60,32 @@ class WiringPlan(unittest.TestCase):
         self.assertTrue(any("real file" in n for n in p.notes))
 
 
+class PluginPlan(unittest.TestCase):
+    WANT = {"mp": {"id": "mp-skills@mp", "marketplace": "mp/skills"}}
+
+    def plan(self, plugins):
+        f = facts({"agent-tools": dict(HTTP)}, {"memory": "/r/memory/skill"})
+        f["want_plugins"], f["plugins"] = self.WANT, plugins
+        return wiring().plan(f)
+
+    def test_missing_plugin_adds_marketplace_and_installs(self):
+        p = self.plan({"installed": [], "enabled": {}, "repos": []})
+        self.assertEqual(p.actions, ["claude-code: add plugin marketplace mp/skills", "claude-code: install plugin mp-skills@mp"])
+
+    def test_installed_plugin_in_place(self):
+        p = self.plan({"installed": ["mp-skills@mp"], "enabled": {"mp-skills@mp": True}, "repos": ["mp/skills"]})
+        self.assertEqual(p.status, OK)
+
+    def test_disabled_plugin_enabled(self):
+        p = self.plan({"installed": ["mp-skills@mp"], "enabled": {"mp-skills@mp": False}, "repos": ["mp/skills"]})
+        self.assertEqual(p.actions, ["claude-code: enable plugin mp-skills@mp"])
+
+    def test_unlisted_plugin_reported_not_removed(self):
+        p = self.plan({"installed": ["mp-skills@mp", "other@x"], "enabled": {}, "repos": ["mp/skills"]})
+        self.assertEqual(p.status, OK)
+        self.assertTrue(any("other@x" in n for n in p.notes))
+
+
 class Jsonc(unittest.TestCase):
     def test_strip(self):
         t = '{\n // c\n "u": "http://x//y", /* b */ "a": [1,2,],\n}'

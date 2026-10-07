@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Continuously syncs AI coding-agent sessions and memories into
-Documents/ai-memory/ (its own git repo, sandeshkini/ai-memory -- moved out
+Documents/personal/ai-memory/ (its own git repo, sandeshkini/ai-memory -- moved out
 of loose Documents/ subfolders 2026-08-15 so this data actually has backup
 coverage), system-wide (not tied to any one project or hook):
 
@@ -18,6 +18,9 @@ gets picked up on the next 15-minute timer run with no code change needed.
 
 Idempotent: re-running only rewrites a transcript if its source changed
 since the last export (mtime-gated), so this is cheap to run on a timer.
+
+This is the one copy, used by every machine (agent-tools is cloned at the same path everywhere):
+aibo-linux runs it from a systemd --user timer, aibo-mac through mac_wrapper.py. See README.md.
 """
 import json
 import os
@@ -43,9 +46,11 @@ def _resolve_ai_memory_root():
     env = os.environ.get("AI_MEMORY_DIR", "").strip()
     if env:
         return Path(env).expanduser()
+    # The current layout first (both machines since 2026-10-07). The old one is only a fallback: if
+    # something ever recreates ~/Documents/ai-memory, the exports must not follow it.
     candidates = [
-        HOME / "Documents" / "ai-memory",
         HOME / "Documents" / "personal" / "ai-memory",
+        HOME / "Documents" / "ai-memory",
     ]
     for c in candidates:
         if c.is_dir():
@@ -289,22 +294,59 @@ def render_opencode_transcript(conn, session_row):
     return "\n".join(lines), created
 
 
+# claude-monitor (retired) ran a headless terminal summarizer through OpenCode and left ~13,000
+# throwaway sessions behind, all starting with this prompt. They are the only OpenCode sessions
+# skipped. (The old rule, agent != 'build', also dropped every real chat: 'build' is OpenCode's
+# default agent, so every cptr and TUI chat has it.)
+JUNK_PROMPT = "Summarize this terminal session in one short line"
+# Optional extra exclusion by agent name, comma-separated (e.g. SYNC_EXCLUDE_AGENTS=build).
+EXCLUDE_AGENTS = [a.strip() for a in os.environ.get("SYNC_EXCLUDE_AGENTS", "").split(",") if a.strip()]
+
+
+def opencode_out_path(slug, sid):
+    """oc-<slug>-<last 8 of the session id>.md. Slugs alone repeat (OpenCode reuses a small pool,
+    and every machine writes into the same folder), so the old oc-<slug>.md names overwrote each
+    other."""
+    return SESSIONS_DIR / f"oc-{slug}-{sid[-8:]}.md"
+
+
+def retire_legacy_export(slug, content):
+    """Remove an old-style oc-<slug>.md once its session has been written under the new name, but
+    only if that file is this session's transcript (same header, and its text is a start of the
+    new one). Any other machine's or session's file with the same slug is left alone."""
+    legacy = SESSIONS_DIR / f"oc-{slug}.md"
+    if not legacy.is_file():
+        return False
+    try:
+        old = legacy.read_bytes().decode("utf-8", errors="replace").rstrip()
+    except OSError:
+        return False
+    if old and content.startswith(old):
+        legacy.unlink(missing_ok=True)
+        return True
+    return False
+
+
 def sync_opencode_sessions():
     if not OPENCODE_DB.exists():
         return 0
     written = 0
     conn = sqlite3.connect(f"file:{OPENCODE_DB}?mode=ro", uri=True)
     try:
-        # agent='build' sessions are claude-monitor's old automated per-chunk
-        # terminal-summarizer calls (thousands of them, reusing a small slug
-        # pool) -- pure noise, not real conversations. Exclude them.
-        sessions = conn.execute(
-            "SELECT id, slug, title, directory, time_updated FROM session "
-            "WHERE agent IS NULL OR agent != 'build' ORDER BY time_created"
-        ).fetchall()
+        sql = (
+            "SELECT s.id, s.slug, s.title, s.directory, s.time_updated FROM session s "
+            "WHERE NOT EXISTS (SELECT 1 FROM message m JOIN part p ON p.message_id = m.id "
+            "  WHERE m.session_id = s.id AND json_extract(m.data, '$.role') = 'user' "
+            "  AND p.data LIKE ?)"
+        )
+        args = [f"%{JUNK_PROMPT}%"]
+        if EXCLUDE_AGENTS:
+            sql += f" AND (s.agent IS NULL OR s.agent NOT IN ({','.join('?' * len(EXCLUDE_AGENTS))}))"
+            args += EXCLUDE_AGENTS
+        sessions = conn.execute(sql + " ORDER BY s.time_created", args).fetchall()
         for row in sessions:
             sid, slug, title, directory, time_updated = row
-            out_path = SESSIONS_DIR / f"oc-{slug}.md"
+            out_path = opencode_out_path(slug, sid)
             src_mtime = (time_updated or 0) / 1000
             if out_path.exists() and out_path.stat().st_mtime >= src_mtime:
                 continue
@@ -314,6 +356,7 @@ def sync_opencode_sessions():
             content, _created = result
             out_path.write_text(content, encoding="utf-8")
             os.utime(out_path, (src_mtime, src_mtime))
+            retire_legacy_export(slug, content)
             written += 1
     finally:
         conn.close()

@@ -79,6 +79,10 @@ args = ["run", "PA_API_TOKEN", "--", "{personal_agent}/systems/email/.venv/bin/p
 # own workspace, cos/agent/.mcp.json (D6).
 
 # --------------------------------------------------------------------------------------- skills
+# Every skill the agents get, shared and machine-specific alike. Our own skills live in
+# agent-tools/skills/<name>/SKILL.md (one folder, both machines); limit one to a machine with
+# `machines` or `os`. Vendor skills stay inside their package and are only linked from here.
+# Index: skills/README.md. Decided by Sandesh 2026-10-07 (D12).
 [skills.memory]
 path = "{agent_tools}/memory/skill"
 machines = ["aibo-linux", "aibo-mac"]
@@ -104,9 +108,21 @@ machines = ["aibo-linux", "aibo-mac"]
 path = "{home}/.cua-driver/skills/cua-driver"
 os = ["darwin"]
 
-[skills.mac-operator]
-path = "{personal_agent}/skills/mac-operator"
+[skills.mac-operator]                  # how to operate aibo-mac and its Agent Chrome (moved from personal-agent, D12)
+path = "{agent_tools}/skills/mac-operator"
 machines = ["aibo-mac"]
+
+[skills.linux-operator]                # how to operate aibo-linux: desktop, its Chrome, services, cptr
+path = "{agent_tools}/skills/linux-operator"
+machines = ["aibo-linux"]
+
+# --------------------------------------------------------------------------------- plugins
+# Claude Code plugins (Claude Code only: OpenCode and agy have no plugins). wiring adds the
+# marketplace and installs + enables the plugin at user scope; it never removes one.
+[plugins.mattpocock-skills]            # Matt Pocock's engineering skills (tdd, diagnosing-bugs, grilling, ...)
+id = "mattpocock-skills@mattpocock"
+marketplace = "mattpocock/skills"
+machines = ["aibo-linux", "aibo-mac"]
 
 # --------------------------------------------------------------------------------- commands
 # Linked into ~/.local/bin (on PATH for shells, cptr and the agents it runs).

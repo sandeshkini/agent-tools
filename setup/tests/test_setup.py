@@ -103,7 +103,9 @@ class LaunchAgentPlans(unittest.TestCase):
 
     def test_sync_linux(self):
         st = {"enabled": "not-found", "active": "inactive"}
-        self.assertEqual(comp("sync-ai-sessions", "linux").plan({"timer": st}).status, GAP)
+        p = comp("sync-ai-sessions", "linux").plan({"timer": st})   # agent-tools' own Linux installer
+        self.assertEqual(p.status, CHANGE)
+        self.assertIn("sync-ai-sessions/install.sh", p.actions[0])
         p = comp("sync-ai-sessions", "linux", {"installer": "/x/setup-sync.sh"}).plan({"timer": st})
         self.assertEqual(p.status, CHANGE)
         self.assertEqual(comp("sync-ai-sessions", "linux").plan({"timer": {"enabled": "enabled", "active": "active"}}).status, OK)
@@ -305,7 +307,7 @@ class LinuxDetect(unittest.TestCase):
         self.assertIn(":8000", p.summary)
 
     def test_sync_timer_missing(self):
-        self.assertEqual(self.plan("sync-ai-sessions").status, GAP)
+        self.assertEqual(self.plan("sync-ai-sessions").status, CHANGE)
         self.assertEqual(self.plan("sync-ai-sessions", {"installer": "bash {profile_dir}/x.sh"}).status, CHANGE)
 
     def test_cptr_unit(self):

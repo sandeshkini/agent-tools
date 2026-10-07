@@ -1,114 +1,60 @@
-# sync-ai-sessions (aibo-mac)
+# sync-ai-sessions
 
-Exports every Claude Code + OpenCode conversation on this Mac, plus both tools'
-memory files, into `~/Documents/personal/ai-memory/` (private repo
-`github.com/sandeshkini/ai-memory`; the installer also accepts an older
-`~/Documents/ai-memory/` clone) and pushes. Runs every 15 minutes under
-launchd. On aibo-mac the job is the named app `com.sandesh.pa.ai-session-sync`
-(personal-agent's `pa-app`), not this installer's plain LaunchAgent.
+Exports every Claude Code and OpenCode conversation on a machine, plus both tools' memory files,
+into `~/Documents/personal/ai-memory/` (private repo `github.com/sandeshkini/ai-memory`) every 15
+minutes. That includes every cptr chat, because cptr runs Claude Code and OpenCode. It's the only
+long-term copy of the transcripts: Claude Code deletes its own after about 30 days.
 
-This is the macOS counterpart of aibo's `~/scripts/sync-ai-sessions.py` +
-`sync-ai-sessions.timer` (see aibo-server `infrastructure/scripts.md`). **Both
-machines write into the same repo**, so the output format here was
-reverse-engineered byte-for-byte from aibo's ~180 existing transcripts — aibo's
-script source was never committed anywhere, so this is a fresh implementation of
-the same contract, not a port.
+**One script, every machine:** `sync_ai_sessions.py` (stdlib only). Since 2026-10-07 aibo-linux runs
+this file too; the old copy in aibo-server `infrastructure/scripts/` is gone.
 
-Unlike aibo there's no nightly `backup.sh` on this Mac, so the git
-`add`/`commit`/`push` is baked into the script itself (identity comes from the
-machine's global git config).
+| Machine | How it runs | Who pushes |
+|---|---|---|
+| aibo-linux | systemd `--user` `sync-ai-sessions.timer`, made by `./install.sh`. `~/scripts/sync-ai-sessions.py` links here | `sync-repos` and the nightly `backup.sh` |
+| aibo-mac | pa-app named app "AI Session Sync" (`com.sandesh.pa.ai-session-sync`) running `mac_wrapper.py` | `mac_wrapper.py`, right after each run |
 
-## Install
+`mac_wrapper.py` runs the script **in-process** (not as a second Python): under launchd, a nested
+Python opening `~/Documents` hangs forever on macOS's privacy (TCC) check. See its docstring.
 
-```bash
-./install.sh                       # venv + LaunchAgent, runs once at load
-launchctl print gui/$(id -u)/com.sandesh.sync-ai-sessions   # verify (aibo-mac: com.sandesh.pa.ai-session-sync)
-tail -f /tmp/sync-ai-sessions.log
-```
+Shared memory (Graphiti, `../memory/`) is separate: it holds only what agents choose to record, and
+its own nightly export writes `ai-memory/knowledge/`. Chats are not fed into it.
 
-## Run by hand
+## Install / run
 
 ```bash
-.venv/bin/python sync_ai_sessions.py            # normal: export + commit + push
-.venv/bin/python sync_ai_sessions.py --no-git   # export only
-.venv/bin/python sync_ai_sessions.py --dry-run  # report, write nothing
-.venv/bin/python sync_ai_sessions.py --force    # ignore the mtime index, re-render all
+./install.sh                                    # Linux: timer; macOS: LaunchAgent (skipped if the named app exists)
+python3 sync_ai_sessions.py                     # run once by hand
+AI_MEMORY_DIR=/tmp/copy python3 sync_ai_sessions.py   # try it against a copy of ai-memory
+systemctl --user list-timers sync-ai-sessions.timer   # Linux
+tail -f /tmp/sync-ai-sessions.log                     # macOS
 ```
 
-## What it reads (read-only, always)
+## What it writes
 
 | Source | Becomes |
 |---|---|
-| `~/.claude/projects/*/[uuid].jsonl` | `sessions/<uuid8>-<YYYYMMDD>-<HHMM>.md` |
-| `~/.claude/projects/*/memory/*.md` | `memories/claude/<sanitized-project-path>/*.md` |
-| `~/.local/share/opencode/opencode.db` | `sessions/<opencode-slug>.md` |
-| OpenCode's memory dir (probed, see below) | `memories/opencode/*.md` |
+| `~/.claude/projects/*/<uuid>.jsonl` | `sessions/<uuid8>-<YYYYMMDD>-<HHMM>.md` |
+| `~/.claude/projects/*/<uuid>/subagents/agent-*.jsonl` | `sessions/subagents/<parent8>-sub-<agent8>-<stamp>.md` |
+| `~/.claude/projects/*/memory/` | `memories/claude/<project dir name>/` (rsync mirror) |
+| `~/.local/share/opencode/opencode.db` (read-only) | `sessions/oc-<slug>-<last 8 of session id>.md` |
+| `~/.opencode/memory/` | `memories/opencode/` |
 
-Nothing is hardcoded: project dirs are discovered by walking
-`~/.claude/projects/`, OpenCode sessions by querying the DB. New ones appear on
-the next run. The DB is opened `mode=ro`; nothing under `~/.claude` or
-`~/.local/share/opencode` is ever written.
+Project dirs and sessions are discovered at run time. A transcript is only rewritten when its
+source is newer than the export, so a run with nothing new is cheap.
 
 ## Decisions worth knowing
 
-**Subagent transcripts are not separate exports.** Claude Code 2.1.x writes
-background-agent sub-transcripts to `<session-uuid>/subagents/agent-*.jsonl`.
-Those are excluded — they aren't user-facing conversations, and every line in
-them carries the *parent's* `sessionId`, so exporting them would fight the parent
-for the same output filename. The exclusion is by location (only top-level
-`*.jsonl` in each project dir is walked), **not** by an `isSidechain` test — so
-sidechain turns that older Claude Code versions inlined into a parent transcript
-still render as part of that parent's markdown. Nothing is lost that aibo's
-format would have kept: the format carries no tool calls or tool results at all,
-and a subagent's result comes back to the parent as a tool result.
+**Which OpenCode sessions are skipped.** Only claude-monitor's leftovers: that retired tool ran a
+headless terminal summarizer through OpenCode and left ~13,000 sessions on aibo-linux, each starting
+with "Summarize this terminal session in one short line". Everything else is exported, including
+subagent sessions. Until 2026-10-07 the rule was `agent != 'build'`, which also dropped every real
+chat, because `build` is OpenCode's default agent: no cptr or TUI OpenCode chat was ever saved.
+`SYNC_EXCLUDE_AGENTS=a,b` adds an agent-name exclusion if one is ever needed.
 
-**OpenCode's `agent='build'` filter is not applied here.** aibo excludes
-`agent='build'` because claude-monitor's retired terminal-summarizer loop left
-~13k throwaway headless sessions under that agent. On this Mac the mapping
-inverts: opencode 1.18's default *interactive* agent is literally `build` — every
-real TUI chat here is `agent='build'`, and the only non-`build` session is a
-`@general` subagent. Applying aibo's literal rule would export nothing and keep
-only the subagent. The same *category* (machine-generated non-conversations) is
-filtered instead by:
+**OpenCode file names carry the session id.** Slugs repeat (OpenCode reuses a small pool, and all
+machines write into one folder), so the old `oc-<slug>.md` names overwrote each other across
+sessions and machines. A run removes an old `oc-<slug>.md` only when it is the same session's
+transcript (its text is the start of the new export); any other machine's file is left alone.
 
-- `parent_id IS NOT NULL` → a session spawned by another session (subagent),
-  the OpenCode analogue of the Claude Code decision above;
-- sessions that render to nothing (no text/reasoning/tool parts).
-
-The aibo rule is still one env var away if this Mac ever grows a headless loop:
-`SYNC_EXCLUDE_AGENTS=build`.
-
-**OpenCode memory store.** aibo mirrors `~/.opencode/memory/`. On macOS that
-doesn't exist (only `~/.opencode/bin`), so the script probes `~/.opencode/memory`,
-`~/.config/opencode/memory`, `~/.local/share/opencode/memory` and skips quietly
-if none exist. Same for Claude Code memory: `~/.claude/projects/*/memory/` is the
-real location (one dir exists here, currently empty) — nothing is fabricated.
-
-**Filename collisions with aibo.** Claude Code names are `uuid8 + start minute`,
-so a cross-machine collision would need the same uuid4 prefix *and* the same
-start minute — not a real risk. OpenCode slugs are the plausible case (aibo's
-current opencode emits `chat-xxxxx`, this Mac emits `adjective-noun`; an upgrade
-could align them). Policy: never overwrite a file this script can't recognise as
-its own — a file whose first line matches and whose bytes are a prefix of the new
-render is a grown transcript (ours, updated in place); anything else is written
-to `<name>-aibo-mac.md` with a warning.
-
-## Idempotency
-
-Two layers, because it runs every 15 minutes:
-
-1. A `(mtime_ns, size)` index per source file (`~/Library/Application
-   Support/sync-ai-sessions/state.json`, deliberately outside both git repos)
-   short-circuits parsing unchanged transcripts.
-2. Even when it does render, the file is only written if the **bytes** differ.
-   Byte comparison, not text: transcripts contain bare `\r` from curl progress
-   bars, and `read_text()` would normalise it to `\n` while `write_text()`
-   wouldn't — which made every run see a phantom diff and rewrite the file.
-
-`--force` re-renders everything and still reports `0 updated` when nothing
-actually changed. If no file changed, git isn't touched at all.
-
-## Logs
-
-`/tmp/sync-ai-sessions.log` (timestamped, flushed — same convention as
-`mcp-tools`).
+**Where the repo is.** `~/Documents/personal/ai-memory` first, then the old `~/Documents/ai-memory`
+as a fallback; `$AI_MEMORY_DIR` overrides both.

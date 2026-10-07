@@ -47,7 +47,7 @@ systemd (Linux), not in a container.
 | `stuck-watch` | notices agent commands silently stuck on a macOS permission prompt / unanswered dialog (idle agent commands, unanswered TCC prompts, password/permission windows) and sends one ntfy push per issue; read-only, never kills or clicks. Any Mac | `stuck-watch/install.sh [--check\|--uninstall]` |
 | `mac-apps` | runs cptr, the cptr watchdog and Stuck Watch (optionally session sync and mcp-tools) as named apps (`cptr.app`, `cptr Watchdog.app`, `Stuck Watch.app`) so privacy lists show their names instead of python3.x/bash and cptr's Full Disk Access belongs to cptr alone; grants FDA first, switches detached, health-gated with rollback. Also **the one named-app builder** (launcher, signing, probe) that Personal Agent's `pa-app` uses. Any Mac | `mac-apps/install.sh --check`, then `--all` (at the Mac), or through `setup.sh` |
 | `mcp-tools` (host mode) | same `publish_artifact`/`notify` MCP as the Docker service above, for a machine with no Docker (thin client hitting aibo's shared board/bus over the public URLs, not the compose network). On aibo-mac it runs as the named app `com.sandesh.pa.agent-tools-mcp` | `mcp-tools/install.sh` |
-| `sync-ai-sessions` | exports Claude Code + OpenCode transcripts and memory into the `ai-memory` repo (`~/Documents/personal/ai-memory`). aibo-mac: named app `com.sandesh.pa.ai-session-sync`; aibo-linux: systemd `--user` timer | `sync-ai-sessions/install.sh` (macOS), see its README |
+| `sync-ai-sessions` | exports Claude Code + OpenCode transcripts and memory into the `ai-memory` repo (`~/Documents/personal/ai-memory`). One script for both machines. aibo-mac: named app `com.sandesh.pa.ai-session-sync`; aibo-linux: systemd `--user` timer | `sync-ai-sessions/install.sh` (Linux and macOS), see its README |
 | `fleet-tunnel` | the aibo-mac → aibo-linux SSH tunnels (shared memory :8012, aibo-linux's cos node :8791) as their own job with a tunnel-only key, replacing cos-node's `--tunnel` flags. **Not switched on on aibo-mac yet**: cos-node still holds the tunnels there | `fleet-tunnel/install.sh [--check\|--uninstall]`; key trusted on aibo-linux with `fleet-tunnel/authorize.sh`. Docs: aibo-server `infrastructure/agents/tools.md` § tunnels |
 
 See `cptr-watchdog/README.md`/`mcp-tools/README.md`. Both carry
@@ -56,11 +56,12 @@ the launchd/systemd unit rather than shipping one checked in.
 
 ### Tool registry: `registry.toml` + `setup.sh --only wiring`
 
-`registry.toml` is the one list of MCP servers, skills and helper commands the agents on each machine
-get, with per-machine/OS/program filters. `setup.sh`'s `wiring` step writes it into Claude Code
+`registry.toml` is the one list of MCP servers, skills, Claude Code plugins and helper commands the
+agents on each machine get, with per-machine/OS/program filters. `setup.sh`'s `wiring` step writes it into Claude Code
 (`claude mcp`, user scope), OpenCode (`opencode.json[c]`), Antigravity (`agy mcp`) and the skill
 folders (`~/.claude/skills`, `~/.config/opencode/skills`, `~/.agents/skills` for cptr and Codex,
-`~/.gemini/config/skills` for agy), and links `bin/` commands into `~/.local/bin`. `setup.sh --check`
+`~/.gemini/config/skills` for agy), installs the listed Claude Code plugins, and links `bin/` commands
+into `~/.local/bin`. `setup.sh --check`
 reports drift. Add tools to the registry, not by hand with `claude mcp add` or by editing
 `opencode.json`. Docs: aibo-server
 `infrastructure/agents/tools.md`.
@@ -75,9 +76,9 @@ reports drift. Add tools to the registry, not by hand with `claude mcp add` or b
 
 ### Skills: `skills/`
 
-`skills/agy` (how other agents ask Antigravity, via `agy-ask`) and `skills/ui-check` (look at changed
-UI via `ui-shot`), both moved here from personal-agent. The `memory` skill is in `memory/skill/`.
-All are linked into each agent program by `wiring`, per `registry.toml`.
+The one folder for every skill we write, shared or machine-specific (`linux-operator` is aibo-linux
+only, `mac-operator` aibo-mac only; the registry decides who gets what). The `memory` skill is in
+`memory/skill/`. Full list, and how to add one: [skills/README.md](skills/README.md).
 
 > `loopback-shim`, a host-level fix for an IPv4/IPv6 quirk in **cptr's own**
 > built-in chrome-mode viewer, lives with the rest of the cptr hub docs at aibo-server
