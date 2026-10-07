@@ -96,6 +96,10 @@ programs = ["claude-code", "opencode", "agents-dir"]
 path = "{agent_tools}/skills/ui-check"
 machines = ["*"]
 
+[skills.cos-card]                      # how any agent writes its own card for the Chief of Staff panel
+path = "{agent_tools}/skills/cos-card"
+machines = ["aibo-linux", "aibo-mac"]
+
 [skills.cua-driver]                    # vendor skill, updated by `cua-driver skills update`
 path = "{home}/.cua-driver/skills/cua-driver"
 os = ["darwin"]
