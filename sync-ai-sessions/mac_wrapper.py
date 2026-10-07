@@ -60,6 +60,14 @@ def main():
         print(f"{ts()}  git commit failed: {commit.stderr.strip()}", flush=True)
         return
     push = run(["git", "push", "-q", "origin", "main"])
+    if push.returncode != 0:
+        # Another machine pushed first (aibo-linux and the laptops write here too): rebase onto it
+        # and try once more instead of waiting for Repo Sync's next pass.
+        pull = run(["git", "pull", "--rebase", "--autostash", "-q", "origin", "main"])
+        if pull.returncode == 0:
+            push = run(["git", "push", "-q", "origin", "main"])
+        else:
+            run(["git", "rebase", "--abort"])
     if push.returncode == 0:
         print(f"{ts()}  git: committed + pushed", flush=True)
     else:
