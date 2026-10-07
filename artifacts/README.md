@@ -31,7 +31,7 @@ Two flavors of storage, both served from the same board:
 ¹ *No auth in the app itself* — reads are protected by whatever fronts it (here: Pangolin SSO on
 `artifacts.kingdomofluna.com`; the separate `push.artifacts.kingdomofluna.com` hostname has SSO
 **off** and is restricted server-side to only the token-gated write routes above — see
-`~/Documents/aibo-server/Services/artifacts.md`). Don't expose this directly to the internet
+aibo-server `machines/personal/aibo-linux/services/artifacts.md`). Don't expose this directly to the internet
 without a front door.
 
 **Publish/create body** (both endpoints share this shape):
@@ -83,7 +83,7 @@ no preview chrome — open the URL and it runs.
 `mcp-tools` (the MCP server agents actually call through) composes the `source` field from two of
 its own env vars — `SOURCE_LABEL` (default `cptr`) and `COMPUTER_LABEL` (no safe default; a
 Docker container's own hostname is meaningless, so this must be set per-machine in that machine's
-`agent-tools/.env` — see `machines.md` for canonical names) — and stamps the result onto every
+`agent-tools/.env` — see aibo-server `machines/README.md` for canonical names) — and stamps the result onto every
 artifact it publishes/creates automatically, so the calling agent never has to declare it itself.
 
 ## Data

@@ -16,8 +16,10 @@ should say "in place" for everything, or list the real gaps.
 
 | Component | macOS | Linux | Done by |
 |---|---|---|---|
-| `computer-use` | cua-driver + daemon, agent-browser, skills, MCP wiring, optional Agent Chrome | not applicable | `computer-use/install.sh` |
+| `secrets` | renders the files listed under `[secrets.render]` (a compose `.env`, `cptr.env`, …) from `~/Documents/secrets/keys.env` | same | `bin/fleet-secret render` |
+| `computer-use` | cua-driver + daemon, agent-browser, optional Agent Chrome (no MCP or skill wiring: that's `wiring`) | not applicable (Linux uses computer-use-linux, wired from the registry) | `computer-use/install.sh` |
 | `mcp-tools` | LaunchAgent on 127.0.0.1:8009 | the Docker service (`mode = "docker"`): checked only | `mcp-tools/install.sh` |
+| `wiring` | writes `registry.toml` (MCP servers, skills, `bin/` commands) into Claude Code, OpenCode, Antigravity (agy), `~/.agents/skills` and `~/.local/bin` | same | setup itself (`agentsetup/components/wiring.py`) |
 | `stuck-watch` | LaunchAgent | not applicable | `stuck-watch/install.sh` |
 | `cptr-watchdog` | LaunchAgent, pointed at the profile's cptr label/port | systemd `--user` timer; another port goes in a drop-in | `cptr-watchdog/install.sh` |
 | `sync-ai-sessions` | LaunchAgent (needs the ai-memory repo and `uv`) | timer: checked; set up by the profile's `installer` if given | `sync-ai-sessions/install.sh` |
@@ -31,6 +33,46 @@ Rebuilding a named app changes its ad-hoc signature, and macOS then forgets its 
 
 Components run in the table's order. Later ones see what earlier ones installed, so one run can
 install Stuck Watch and then wrap it in a named app. `cptr-app` always runs last.
+
+### `secrets`
+
+Files that have to hold a secret are generated, never hand-edited. The store is
+`~/Documents/secrets/keys.env` (read through [`bin/fleet-secret`](../bin/fleet-secret); on macOS the
+login Keychain is a mirror). A template with `${NAME}` placeholders lives next to the machine's
+profile, and the profile lists what to render:
+
+```toml
+[secrets]
+env_file = "~/Documents/secrets/keys.env"
+
+[secrets.render]
+cptr = { template = "{profile_dir}/env/cptr.env", out = "~/.cptr/cptr.env", note = "restart cptr to apply" }
+
+[components.secrets]
+enabled = true
+```
+
+`--check` reports an output that differs from its rendered template (without printing values);
+apply rewrites it (mode 600) and shows the `note`, since the service that reads it usually needs a
+restart. Docs: aibo-server `infrastructure/secrets.md`.
+
+### `wiring`
+
+[`registry.toml`](../registry.toml) is the one list of MCP servers, skills and helper commands. Each
+entry can be limited to some machines (the profile's `[machine] name`), an OS or some programs.
+`wiring` makes each agent program on this machine match it:
+
+- MCP servers: Claude Code (`claude mcp`, user scope), OpenCode (the `mcp` block of
+  `opencode.json[c]`), Antigravity (`agy mcp`). A program that isn't installed is skipped.
+- Skill links in `~/.claude/skills`, `~/.config/opencode/skills`, `~/.agents/skills` (cptr, Codex)
+  and `~/.gemini/config/skills` (agy).
+- `bin/` commands (`fleet-secret`, `pa-secret`, `agy-ask`, `ui-shot`) linked into `~/.local/bin`.
+
+MCP servers and skills that aren't in the registry are reported, not removed, except stale links
+of ours (pointing into agent-tools or personal-agent). Real folders and files are never overwritten.
+Entries that use `{personal_agent}` need `[paths] personal_agent` in the profile. Secrets never go
+into agent configs: a server that needs one runs behind `fleet-secret run NAME -- …`. Docs: aibo-server
+`infrastructure/agents/tools.md`.
 
 ## Commands
 
@@ -61,8 +103,9 @@ Setup uses the first of these it finds:
 3. `~/.config/agent-setup/profile.toml`
 
 Keep real profiles out of this public repo: they name machines and paths. Put them in a private repo
-as `machines/<machine>/setup.toml`. Then `--profile-from <that repo>` picks the profile whose `[match]`
-fits this host. Every key given must match, and a value can be a list:
+as `machines/<network>/<machine>/setup.toml` (e.g. `machines/personal/aibo-linux/setup.toml`;
+a flat `machines/<machine>/setup.toml` is found too). Then `--profile-from <that repo>` picks the
+profile whose `[match]` fits this host. Templates for `secrets` go in the same folder (e.g. `env/`). Every key given must match, and a value can be a list:
 
 | `[match]` key | Compared with |
 |---|---|
@@ -75,7 +118,7 @@ fits this host. Every key given must match, and a value can be a list:
 `--profile-from my-infra` looks for a folder of that name next to this clone and in `~/Documents`,
 `~`, `~/src` and `~/code`. A path works too. Two Macs can share a
 short hostname, so match those on `computer_name` + `model`. To skip the flag later, link the file:
-`ln -s <repo>/machines/<machine>/setup.toml ~/.config/agent-setup/profile.toml`.
+`ln -s <repo>/machines/<network>/<machine>/setup.toml ~/.config/agent-setup/profile.toml`.
 
 ## What needs a person
 
@@ -84,12 +127,13 @@ Setup stops and says so in these cases. It never tries to get around them:
 - **Full Disk Access for `cptr.app`.** `cptr-app` builds the app, opens System Settings and waits
   (up to 10 min) until a probe running as the app can read a Full-Disk-Access-only file. Only then
   does it switch cptr over. You add the app and confirm with your password or Touch ID.
-- **Accessibility and Screen Recording for cua-driver** after a fresh install:
+- **Accessibility and Screen Recording for cua-driver** (Macs) after a fresh install:
   `cua-driver permissions grant`.
 - **First-run prompts** of a new named app (e.g. "Stuck Watch would like to access Documents").
   Click Allow.
-- **Secrets.** mcp-tools needs `PUBLISH_TOKEN` and `NTFY_TOKEN`. Export them, or set
-  `[secrets] env_file` to a `KEY=VALUE` file (chmod 600). Setup passes them to the installer and never
+- **Secrets.** mcp-tools needs `PUBLISH_TOKEN` and `NTFY_TOKEN`, and `secrets` needs every name its
+  templates use. Export them, or set `[secrets] env_file` to a `KEY=VALUE` file (chmod 600; on these
+  machines `~/Documents/secrets/keys.env`, managed with `fleet-secret`). Setup passes them to the installer and never
   prints or logs them. Its output and log redact anything that looks like a token.
 - **Logins** in the Agent Chrome, and cloning the ai-memory repo for session sync.
 

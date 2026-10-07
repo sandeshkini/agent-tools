@@ -1,12 +1,14 @@
 # sync-ai-sessions (aibo-mac)
 
 Exports every Claude Code + OpenCode conversation on this Mac, plus both tools'
-memory files, into `~/Documents/ai-memory/` (private repo
-`github.com/sandeshkini/ai-memory`) and pushes. Runs every 15 minutes under
-launchd.
+memory files, into `~/Documents/personal/ai-memory/` (private repo
+`github.com/sandeshkini/ai-memory`; the installer also accepts an older
+`~/Documents/ai-memory/` clone) and pushes. Runs every 15 minutes under
+launchd. On aibo-mac the job is the named app `com.sandesh.pa.ai-session-sync`
+(personal-agent's `pa-app`), not this installer's plain LaunchAgent.
 
 This is the macOS counterpart of aibo's `~/scripts/sync-ai-sessions.py` +
-`sync-ai-sessions.timer` (see `aibo-server/Infrastructure/scripts.md`). **Both
+`sync-ai-sessions.timer` (see aibo-server `infrastructure/scripts.md`). **Both
 machines write into the same repo**, so the output format here was
 reverse-engineered byte-for-byte from aibo's ~180 existing transcripts — aibo's
 script source was never committed anywhere, so this is a fresh implementation of
@@ -20,7 +22,7 @@ machine's global git config).
 
 ```bash
 ./install.sh                       # venv + LaunchAgent, runs once at load
-launchctl print gui/$(id -u)/com.sandesh.sync-ai-sessions   # verify
+launchctl print gui/$(id -u)/com.sandesh.sync-ai-sessions   # verify (aibo-mac: com.sandesh.pa.ai-session-sync)
 tail -f /tmp/sync-ai-sessions.log
 ```
 
@@ -109,4 +111,4 @@ actually changed. If no file changed, git isn't touched at all.
 ## Logs
 
 `/tmp/sync-ai-sessions.log` (timestamped, flushed — same convention as
-`cptr-input/desktop/desktop_server.py` and `mcp-tools`).
+`mcp-tools`).

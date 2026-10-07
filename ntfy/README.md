@@ -3,7 +3,7 @@
 Push notifications: **an agent finished**, **an agent needs your input**, **an artifact was
 published**. Delivered to the ntfy app on your phone.
 
-One bus, runs on aibo only — every machine (aibo-mac, aibo-dev, sage-agent) pushes to this same
+One bus, runs on aibo only — every machine (aibo-mac, aibo-dev, artos-agent) pushes to this same
 instance rather than running its own, so all notifications land in one place regardless of which
 machine did the work. (There's no actual hub/node profile split in the compose file — just one
 shared service every machine's `mcp-tools`/agent points at, same pattern as the artifacts board.)

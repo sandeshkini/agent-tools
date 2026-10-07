@@ -1,12 +1,14 @@
 # agent-tools setup profile (example). Copy to ~/.config/agent-setup/profile.toml, or keep real
-# profiles in a private repo and use `setup.sh --profile-from <that repo>`. Keep hostnames, tokens and
+# profiles in a private repo as machines/<network>/<machine>/setup.toml (or machines/<machine>/setup.toml)
+# and use `setup.sh --profile-from <that repo>`. Keep hostnames, tokens and
 # personal paths out of public repos.
 #
 # Components not listed under [components.*] are off. Paths may use ~, {agent_tools} (this clone) and
 # {profile_dir} (the folder this file is in).
 
 [machine]
-name = "my-mac"                        # used in log lines, ntfy titles, mcp-tools' COMPUTER_LABEL
+name = "my-mac"                        # used in log lines, ntfy titles, mcp-tools' COMPUTER_LABEL, and
+                                       # matched against `machines = [...]` in registry.toml (wiring)
 
 # How --profile-from recognises this machine. Every key given must match (a value can be a list).
 # Keys: computer_name, local_hostname, hostname, model (`sysctl -n hw.model`), os (darwin / linux).
@@ -25,15 +27,25 @@ dir = "~/Applications/Agent Apps"
 bundle_prefix = "local.agent-apps"
 # sign_identity = "My Apps Signing"    # a code-signing identity in the login Keychain; else ad-hoc
 
+# [paths]
+# personal_agent = "~/src/personal-agent"   # only if registry.toml entries use {personal_agent}
+
 [secrets]
-# A KEY=VALUE file for installers that need tokens (mcp-tools: PUBLISH_TOKEN, NTFY_TOKEN) and for
-# setup's own ntfy push. Read at run time, never printed or logged.
+# A KEY=VALUE file for installers that need tokens (mcp-tools: PUBLISH_TOKEN, NTFY_TOKEN), for
+# setup's own ntfy push, and the store bin/fleet-secret reads for the `secrets` component. Read at
+# run time, never printed or logged.
 # env_file = "~/secrets/keys.env"
+
+# [secrets.render]                     # files the `secrets` component generates from env_file
+# app = { template = "{profile_dir}/env/app.env", out = "~/.config/app/app.env", note = "restart app to apply" }
 
 [ntfy]
 # Optional: otherwise found like Stuck Watch does (env, ~/.config/stuck-watch/config, mcp-tools' plist).
 # url = "https://ntfy.example.com"
 # topic = "mytopic"
+
+# [components.secrets]                # render [secrets.render] (see setup/README.md)
+# enabled = true
 
 [components.computer-use]
 enabled = true
@@ -43,6 +55,10 @@ agent_chrome = true                    # the agents' own Chrome on CDP :9333
 enabled = true
 # mode = "docker"                      # served by the Docker compose stack here: only check it answers
 # port = 8009
+
+# [components.wiring]                 # registry.toml -> MCP servers, skills, bin/ commands in every agent
+# enabled = true                       # program here (Claude Code, OpenCode, agy, ~/.agents/skills)
+# registry = "{agent_tools}/registry.toml"   # the default
 
 [components.stuck-watch]
 enabled = true
