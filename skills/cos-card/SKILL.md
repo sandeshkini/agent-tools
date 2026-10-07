@@ -46,4 +46,6 @@ The Dropbox token is revoked.
   you do something irreversible without a further check.
 - **No headings, tables or images** in the body (they're flattened to plain lines).
 - Valid JSON on the header, one block per reply, at the end.
+- The opening and closing fences go **on their own lines**. Don't write the fence name inline in
+  prose (e.g. when talking about cards): the panel would read it as an empty card.
 - Plain words, no jargon, no internal ids or paths unless he needs them.
