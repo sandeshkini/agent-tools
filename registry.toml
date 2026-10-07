@@ -11,7 +11,7 @@
 #
 # Placeholders in strings:
 #   {agent_tools}     this clone
-#   {personal_agent}  personal-agent's clone (profile [paths] personal_agent; aibo-mac only)
+#   {personal_agent}  personal-agent's clone, ~/Documents/personal/personal-agent (profile [paths]; aibo-mac only)
 #   {home}            $HOME
 #   {npm_root}        `npm root -g`
 #   {secret:NAME}     not allowed: secrets never go into agent configs. Put a stdio server behind

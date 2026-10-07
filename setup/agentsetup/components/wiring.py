@@ -77,10 +77,8 @@ class Wiring(Component):
         if p:
             p = Path(self.ctx.expand(p))
             return p if p.is_dir() else None
-        for c in ("Documents/personal/personal-agent", "Documents/personal-agent"):
-            if (self.ctx.home / c).is_dir():
-                return self.ctx.home / c
-        return None
+        c = self.ctx.home / "Documents/personal/personal-agent"
+        return c if c.is_dir() else None
 
     def npm_root(self):
         if "npm_root" not in self.ctx.cache:

@@ -65,9 +65,8 @@ def routines_running():
     """Routines drive the same Agent Chrome. A screenshot run resizes the window and opens
     tabs, so it would both capture the agent's page and disturb the routine."""
     # personal-agent's routines (aibo-mac) drive the same Agent Chrome; their state lives there.
-    pa = os.environ.get("PERSONAL_AGENT_DIR") or next((d for d in (
-        os.path.expanduser("~/Documents/personal/personal-agent"),
-        os.path.expanduser("~/Documents/personal-agent")) if os.path.isdir(d)), "")
+    pa = os.environ.get("PERSONAL_AGENT_DIR") or os.path.expanduser("~/Documents/personal/personal-agent")
+    pa = pa if os.path.isdir(pa) else ""
     base = os.path.join(pa, "var", "routines") if pa else "/nonexistent"
     out = []
     for f in glob.glob(os.path.join(base, "*", "running.json")):
