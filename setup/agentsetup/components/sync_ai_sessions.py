@@ -34,7 +34,7 @@ class SyncAiSessions(Component):
                                 "[components.sync-ai-sessions] installer in the profile")
         blockers = []
         if not f["repo"]:
-            blockers.append("clone the ai-memory repo to ~/Documents/ai-memory first")
+            blockers.append("clone the ai-memory repo to ~/Documents/personal/ai-memory first")
         if not f["uv"]:
             blockers.append("install uv first (brew install uv)")
         return plan_launch_agent(f["jobs"], f"run sync-ai-sessions/install.sh (LaunchAgent {LABEL}, every 15 min)",

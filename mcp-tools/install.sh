@@ -94,4 +94,4 @@ echo "  curl -s http://127.0.0.1:8009/mcp"
 echo "  tail -f /tmp/mcp-tools.log"
 echo
 echo "next: wire it into Claude Code + OpenCode's own MCP config (cptr doesn't forward its"
-echo "tool_servers to the CLIs) — see ~/Documents/aibo-server/Services/cptr/README.md § MCP integrations."
+echo "tool_servers to the CLIs) — see aibo-server/infrastructure/agents/cptr/README.md § MCP integrations."

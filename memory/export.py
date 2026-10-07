@@ -2,7 +2,7 @@
 """Export the shared agent memory to Markdown, so the long-term record is plain files in git.
 
 Runs on aibo-linux (systemd --user timer `memory-export`, nightly). Reads FalkorDB inside the
-`memory` container and writes, under ~/Documents/ai-memory/knowledge/<group>/:
+`memory` container and writes, under ~/Documents/personal/ai-memory/knowledge/<group>/:
 
   episodes/YYYY-MM.md   every episode (the raw text an agent or Sandesh recorded, who/when).
                         THIS is the source of truth: the graph can be rebuilt from it.
@@ -11,7 +11,7 @@ Runs on aibo-linux (systemd --user timer `memory-export`, nightly). Reads Falkor
 
 Then commits in the ai-memory repo (backup.sh pushes it nightly). Stdlib only.
 
-  python3 memory/export.py [--group personal] [--out ~/Documents/ai-memory/knowledge] [--no-commit]
+  python3 memory/export.py [--group personal] [--out ~/Documents/personal/ai-memory/knowledge] [--no-commit]
 """
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ def clean(s) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--group", default="personal")
-    ap.add_argument("--out", default=str(Path.home() / "Documents/ai-memory/knowledge"))
+    ap.add_argument("--out", default=str(Path.home() / "Documents/personal/ai-memory/knowledge"))
     ap.add_argument("--no-commit", action="store_true")
     a = ap.parse_args()
 
