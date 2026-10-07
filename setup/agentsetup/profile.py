@@ -89,9 +89,11 @@ def find_repo(spec, start=None):
 
 
 def candidates(folder):
-    """Profiles in a folder: machines/*/setup.toml (an infrastructure repo), else */setup.toml or *.toml."""
+    """Profiles in a folder: machines/[<network>/]*/setup.toml (an infrastructure repo; aibo-server groups
+    machines by network, e.g. machines/personal/aibo-linux), else */setup.toml or *.toml."""
     folder = Path(folder)
-    found = sorted(folder.glob("machines/*/setup.toml")) or sorted(folder.glob("*/setup.toml")) \
+    found = sorted(set(folder.glob("machines/*/setup.toml")) | set(folder.glob("machines/*/*/setup.toml"))) \
+        or sorted(folder.glob("*/setup.toml")) \
         or sorted(p for p in folder.glob("*.toml"))
     return found
 

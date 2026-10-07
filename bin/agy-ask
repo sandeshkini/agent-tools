@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+"""Ask Antigravity CLI (agy: Gemini, plus Claude/GPT-OSS models) one question, safely.
+
+agy trusts /Users/sandesh as a workspace and, in headless mode, reads any file under the
+folder it is started in. So never start it in $HOME or a repo with secrets. This wrapper
+starts it in an empty scratch folder holding only COPIES of the files you pass, prints the
+answer, and deletes the folder. See skills/agy/SKILL.md.
+
+  agy-ask "Summarise this" --file report.pdf
+  agy-ask "Compare these two" --file a.md --file b.md --model gemini-3.1-pro-high
+  agy-ask "What does this code do?" --dir ~/Documents/personal/apps/lifeos/backend   # read-only
+  agy-ask "Review this diff" --file /tmp/change.diff --json        # full result (usage, id)
+
+Exit 0 with the answer on stdout; exit 1 with the reason on stderr.
+"""
+import argparse
+import json
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+SECRET_HINTS = ("secrets", "keys.env", ".env", "id_rsa", "id_ed25519", ".ssh", "Keychain")
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("prompt")
+    ap.add_argument("--file", action="append", default=[], help="copy this file into the scratch workspace (repeatable)")
+    ap.add_argument("--dir", action="append", default=[], help="let agy READ this folder too (repeatable; --add-dir)")
+    ap.add_argument("--model", help="e.g. gemini-3.1-pro-high (default: agy's, Gemini 3.8 Flash). List: agy models")
+    ap.add_argument("--timeout", type=int, default=300, help="seconds (default 300)")
+    ap.add_argument("--json", action="store_true", help="print agy's full JSON result instead of just the answer")
+    a = ap.parse_args()
+
+    for p in a.file + a.dir:
+        if any(h in p for h in SECRET_HINTS):
+            print(f"agy-ask: refusing to send {p!r} to agy (looks like a secret)", file=sys.stderr)
+            return 1
+    if shutil.which("agy") is None:
+        print("agy-ask: agy not found (install: see skills/agy/SKILL.md)", file=sys.stderr)
+        return 1
+
+    with tempfile.TemporaryDirectory(prefix="agy-ask-") as ws:
+        for f in a.file:
+            src = Path(f).expanduser()
+            if not src.is_file():
+                print(f"agy-ask: no such file: {f}", file=sys.stderr)
+                return 1
+            shutil.copy2(src, Path(ws) / src.name)
+        cmd = ["agy", "-p", a.prompt, "--output-format", "json", "--print-timeout", f"{a.timeout}s"]
+        if a.model:
+            cmd += ["--model", a.model]
+        for d in a.dir:
+            cmd += ["--add-dir", str(Path(d).expanduser().resolve())]
+        try:
+            out = subprocess.run(cmd, cwd=ws, capture_output=True, text=True, timeout=a.timeout + 30)
+        except subprocess.TimeoutExpired:
+            print(f"agy-ask: no answer within {a.timeout}s", file=sys.stderr)
+            return 1
+
+    text = out.stdout.strip()
+    try:
+        res = json.loads(text[text.index("{"):])
+    except ValueError:
+        # Not JSON: agy explains itself in plain text (e.g. a denied permission, not signed in).
+        print(f"agy-ask: {(text or out.stderr).strip()[:800]}", file=sys.stderr)
+        return 1
+    if a.json:
+        print(json.dumps(res, indent=2))
+        return 0 if res.get("status") == "SUCCESS" and (res.get("response") or "").strip() else 1
+    # agy says SUCCESS even when it was blocked; `denied_actions` is the tell.
+    denied = ", ".join(d.get("action", "?") for d in res.get("denied_actions") or [])
+    answer = (res.get("response") or "").strip()
+    if res.get("status") != "SUCCESS" or not answer:
+        why = f"blocked from: {denied} (headless agy can't run commands, browse, write, or read outside its folder)" if denied else f"{res.get('status')}, empty answer"
+        print(f"agy-ask: {why}", file=sys.stderr)
+        return 1
+    if denied:
+        print(f"agy-ask: note: agy was blocked from {denied}; the answer may be incomplete", file=sys.stderr)
+    print(answer)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

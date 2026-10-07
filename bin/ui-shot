@@ -1,0 +1,137 @@
+#!/usr/bin/env python3
+"""ui-shot — screenshot a web page the way a person would see it, at several sizes and themes.
+
+Built so agents that change UI *look* at the result instead of guessing. Uses agent-browser
+(the Agent Chrome), so it renders with real fonts, real data and the logged-in session.
+
+  ui-shot http://127.0.0.1:4000/lifeos/?tab=habits            # desktop + phone, light
+  ui-shot URL --sizes desktop,phone,tablet --themes light,dark
+  ui-shot lifeos:financials                                   # LifeOS shortcut (see below)
+  ui-shot lifeos:habits --click "Markets" --out /tmp/shots
+
+Shortcut `lifeos:<tab>` opens LifeOS on this Mac. LifeOS is built to live under /lifeos/
+behind Traefik + Pangolin SSO, which an agent can't pass. So ui-shot runs a throwaway
+**read-only** proxy (GET only) on 127.0.0.1:4019 that adds the /lifeos prefix back in
+front of the container on :4000. Writes are refused, so screenshots can't change data.
+
+Test a build BEFORE it goes live: run it as a separate container (e.g. on :4002) and
+  LIFEOS_UPSTREAM=http://127.0.0.1:4002 ui-shot lifeos:habits
+A blank screenshot means the app crashed. Check `document.getElementById("root").innerHTML.length`.
+
+Theme: sets localStorage "lifeos-theme" (LifeOS's key) before loading. Harmless elsewhere.
+Output: prints one PNG path per shot, e.g. /tmp/ui-shot/habits-desktop-light.png.
+Then read the PNGs (they're images) and judge them against design/DESIGN.md.
+"""
+import argparse, glob, http.server, json, os, re, subprocess, sys, threading, time, urllib.request
+
+SIZES = {"desktop": (1440, 900), "phone": (440, 956), "tablet": (834, 1112), "wide": (1920, 1080)}
+AB = "agent-browser"
+PROXY_PORT = 4019
+
+
+def ab(*args, timeout=60):
+    return subprocess.run([AB, *args], capture_output=True, text=True, timeout=timeout).stdout.strip()
+
+
+def start_proxy(upstream):
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            p = self.path[len('/lifeos'):] if self.path.startswith('/lifeos') else self.path
+            req = urllib.request.Request(upstream + (p or '/'), headers={
+                k: v for k, v in self.headers.items() if k.lower() not in ('host', 'accept-encoding')})
+            try:
+                r = urllib.request.urlopen(req, timeout=30); code, data, hdrs = r.status, r.read(), r.headers
+            except urllib.error.HTTPError as e:
+                code, data, hdrs = e.code, e.read(), e.headers
+            self.send_response(code)
+            for k, v in hdrs.items():
+                if k.lower() not in ('transfer-encoding', 'connection', 'content-length'):
+                    self.send_header(k, v)
+            self.send_header('Content-Length', str(len(data))); self.end_headers(); self.wfile.write(data)
+
+        def _refuse(self):
+            self.send_response(403); self.end_headers()
+        do_POST = do_PUT = do_DELETE = do_PATCH = _refuse
+
+        def log_message(self, *a):
+            pass
+    http.server.ThreadingHTTPServer.allow_reuse_address = True
+    srv = http.server.ThreadingHTTPServer(('127.0.0.1', PROXY_PORT), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv
+
+
+def routines_running():
+    """Routines drive the same Agent Chrome. A screenshot run resizes the window and opens
+    tabs, so it would both capture the agent's page and disturb the routine."""
+    # personal-agent's routines (aibo-mac) drive the same Agent Chrome; their state lives there.
+    pa = os.environ.get("PERSONAL_AGENT_DIR") or next((d for d in (
+        os.path.expanduser("~/Documents/personal/personal-agent"),
+        os.path.expanduser("~/Documents/personal-agent")) if os.path.isdir(d)), "")
+    base = os.path.join(pa, "var", "routines") if pa else "/nonexistent"
+    out = []
+    for f in glob.glob(os.path.join(base, "*", "running.json")):
+        try:
+            os.kill(int(json.load(open(f))["pid"]), 0)
+            out.append(os.path.basename(os.path.dirname(f)))
+        except (OSError, ValueError, KeyError):
+            pass
+    return out
+
+
+def main():
+    busy = routines_running()
+    if busy and "--force" not in sys.argv:
+        sys.exit(f"ui-shot: routine(s) running in the Agent Chrome: {', '.join(busy)}. "
+                 "Wait for them to finish (LifeOS › System › Agents), or pass --force.")
+    sys.argv = [a for a in sys.argv if a != "--force"]
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("url")
+    ap.add_argument("--sizes", default="desktop,phone")
+    ap.add_argument("--themes", default="light")
+    ap.add_argument("--click", action="append", default=[],
+                    help="text or aria-label of a button/tab to click after load (e.g. a sub-tab, \"Open menu\"). "
+                         "Repeat for several clicks in order; end with * to match the start of the text (\"IBKR TFSA*\")")
+    ap.add_argument("--wait", type=float, default=3.5, help="seconds to let the page settle")
+    ap.add_argument("--out", default="/tmp/ui-shot")
+    a = ap.parse_args()
+
+    srv = None
+    url, name = a.url, "page"
+    m = re.match(r"lifeos:(\w+)", a.url)
+    if m:
+        srv = start_proxy(os.environ.get("LIFEOS_UPSTREAM", "http://127.0.0.1:4000"))
+        name = m.group(1)
+        url = f"http://127.0.0.1:{PROXY_PORT}/lifeos/?tab={name}"
+    os.makedirs(a.out, exist_ok=True)
+
+    # own tab, so we never navigate someone's working tab away
+    ab("tab", "new", url)
+    time.sleep(2)   # let the first page load, so the theme lands in the right origin's storage
+    try:
+        for theme in a.themes.split(","):
+            for size in a.sizes.split(","):
+                w, h = SIZES[size]
+                ab("set", "viewport", str(w), str(h))
+                ab("eval", f"try{{localStorage.setItem('lifeos-theme','{theme}')}}catch(e){{}}")
+                sep = "&" if "?" in url else "?"
+                ab("open", f"{url}{sep}_shot={int(time.time()*1000)}")   # cache-buster: avoid stale bundles
+                time.sleep(a.wait)
+                for c in a.click:
+                    ab("eval", "(()=>{const t=%r,p=t.endsWith('*'),s=p?t.slice(0,-1):t;"
+                               "const hit=e=>{const x=e.textContent.trim();return p?x.startsWith(s):(x===s||e.getAttribute('aria-label')===s)};"
+                               "const b=[...document.querySelectorAll('button,a,[role=tab]')].filter(e=>e.getClientRects().length&&hit(e));"
+                               "if(b.length)b[0].click()})()" % c)
+                    time.sleep(a.wait)
+                out = os.path.join(a.out, f"{name}-{size}-{theme}.png")
+                ab("screenshot", out)
+                print(out)
+    finally:
+        ab("set", "viewport", "1440", "900")
+        ab("tab", "close")
+        if srv:
+            srv.shutdown()
+
+
+if __name__ == "__main__":
+    main()

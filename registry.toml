@@ -1,0 +1,113 @@
+# The tool registry: every MCP server, skill and helper command the agents on a machine get.
+# This file is the source of truth. `setup.sh --only wiring` writes it into each agent program on this
+# machine, and `setup.sh --check` reports any drift. Decided by Sandesh on 2026-10-07 (D3). Don't add
+# tools by hand with `claude mcp add` or by editing opencode.json; add them here.
+# Docs: aibo-server/infrastructure/agents/tools.md
+#
+# Where an entry applies:
+#   machines = ["aibo-linux"]    profile [machine] name; "*" = every machine that runs `wiring`
+#   os       = ["linux"]         linux | darwin
+#   programs = ["claude-code"]   limit to some agent programs (default: all of them)
+#
+# Placeholders in strings:
+#   {agent_tools}     this clone
+#   {personal_agent}  personal-agent's clone (profile [paths] personal_agent; aibo-mac only)
+#   {home}            $HOME
+#   {npm_root}        `npm root -g`
+#   {secret:NAME}     not allowed: secrets never go into agent configs. Put a stdio server behind
+#                     `fleet-secret run NAME -- …` instead (see pa-mail).
+
+# ----------------------------------------------------------------------------------- programs
+# The agent programs wiring writes into. A program that isn't installed is skipped and reported.
+[programs.claude-code]
+mcp = "claude-cli"                     # `claude mcp add/remove --scope user` (~/.claude.json)
+skills = "~/.claude/skills"
+
+[programs.opencode]
+mcp = "opencode-json"                  # merges the "mcp" block of ~/.config/opencode/opencode.json[c]
+skills = "~/.config/opencode/skills"
+
+[programs.agents-dir]                  # the cross-agent folder: cptr reads it, and so does Codex
+skills = "~/.agents/skills"
+
+[programs.antigravity]                 # agy (D8, 2026-10-07)
+mcp = "agy-cli"                        # `agy mcp add/remove` (~/.gemini/config/mcp_config.json)
+skills = "~/.gemini/config/skills"     # agy's global customization root
+
+# --------------------------------------------------------------------------------- MCP servers
+[mcp.agent-tools]                      # publish_artifact / notify ... (mcp-tools, :8009 on every machine)
+url = "http://127.0.0.1:8009/mcp"
+machines = ["*"]
+
+[mcp.memory]                           # shared long-term memory (Graphiti on aibo-linux; tunnel elsewhere)
+url = "http://127.0.0.1:8012/mcp/"
+machines = ["aibo-linux", "aibo-mac"]
+
+[mcp.computer-use-linux]               # desktop control on Linux (GNOME, X11 session on :0)
+os = ["linux"]
+command = "{home}/.local/bin/computer-use-linux"
+args = ["mcp"]
+env = { DISPLAY = ":0", XAUTHORITY = "/run/user/1000/gdm/Xauthority", XDG_CURRENT_DESKTOP = "ubuntu:GNOME", XDG_SESSION_TYPE = "x11", DBUS_SESSION_BUS_ADDRESS = "unix:path=/run/user/1000/bus", COMPUTER_USE_LINUX_SCREENSHOT_BACKEND = "gnome-screenshot" }
+
+[mcp.cua-driver]                       # desktop control on macOS
+os = ["darwin"]
+command = "{home}/.local/bin/cua-driver"
+args = ["mcp"]
+
+[mcp.agent-browser]                    # web pages (D7: an MCP tool on every machine)
+os = ["linux"]
+command = "{home}/.local/bin/agent-browser"
+args = ["mcp"]
+env = { DISPLAY = ":0", XAUTHORITY = "/run/user/1000/gdm/Xauthority", AGENT_BROWSER_HEADED = "1", AGENT_BROWSER_PROFILE = "{home}/.agent-browser/profile", AGENT_BROWSER_DOWNLOAD_PATH = "{home}/Downloads/agent-browser" }
+
+[mcp.agent-browser-mac]                # same tool on the Macs, driving the Agent Chrome (CDP :9333,
+name = "agent-browser"                 # from ~/.agent-browser/config.json).
+os = ["darwin"]
+command = "/opt/homebrew/bin/agent-browser"
+args = ["mcp"]
+# HOLD: off until personal-agent's pa-routine runs its agents without this MCP. Otherwise a routine
+# could click through the MCP and skip pa-guard, which only wraps the agent-browser *command*.
+# Flip to true once that's done (see aibo-server/infrastructure/agents/tools.md, "agent-browser").
+enabled = false
+
+[mcp.pa-mail]                          # mail + calendar search (aibo-mac only; D3a: OpenCode too)
+machines = ["aibo-mac"]
+command = "{agent_tools}/bin/fleet-secret"
+args = ["run", "PA_API_TOKEN", "--", "{personal_agent}/systems/email/.venv/bin/python", "{personal_agent}/systems/mcp/server.py"]
+
+# fleet (the Chief's control panel) is deliberately NOT here: it stays registered only in the Chief's
+# own workspace, cos/agent/.mcp.json (D6).
+
+# --------------------------------------------------------------------------------------- skills
+[skills.memory]
+path = "{agent_tools}/memory/skill"
+machines = ["aibo-linux", "aibo-mac"]
+
+[skills.agent-browser]                 # vendor skill shipped inside the npm package
+path = "{npm_root}/agent-browser/skills/agent-browser"
+machines = ["*"]
+
+[skills.agy]                           # how other agents ask Antigravity (so not for agy itself)
+path = "{agent_tools}/skills/agy"
+machines = ["*"]
+programs = ["claude-code", "opencode", "agents-dir"]
+
+[skills.ui-check]
+path = "{agent_tools}/skills/ui-check"
+machines = ["*"]
+
+[skills.cua-driver]                    # vendor skill, updated by `cua-driver skills update`
+path = "{home}/.cua-driver/skills/cua-driver"
+os = ["darwin"]
+
+[skills.mac-operator]
+path = "{personal_agent}/skills/mac-operator"
+machines = ["aibo-mac"]
+
+# --------------------------------------------------------------------------------- commands
+# Linked into ~/.local/bin (on PATH for shells, cptr and the agents it runs).
+[bin]
+fleet-secret = "{agent_tools}/bin/fleet-secret"
+pa-secret = "{agent_tools}/bin/fleet-secret"
+agy-ask = "{agent_tools}/bin/agy-ask"
+ui-shot = "{agent_tools}/bin/ui-shot"

@@ -4,7 +4,7 @@
 # Idempotent: re-run any time; it fixes what's missing and leaves
 # the rest alone. See README.md for what each step does and what stays manual.
 #
-#   ./install.sh                  cua-driver + its daemon, agent-browser, skills, MCP wiring
+#   ./install.sh                  cua-driver + its daemon, agent-browser (MCP + skills: setup.sh wiring)
 #   ./install.sh --agent-chrome   also the Agent Chrome LaunchAgent + agent-browser cdp config
 #   ./install.sh --check          only report what's installed (changes nothing)
 set -euo pipefail
@@ -36,16 +36,6 @@ miss() { printf '  \033[33m•\033[0m %s\n' "$*"; }
 step() { printf '\n== %s ==\n' "$*"; }
 loaded() { launchctl print "gui/$UID_/$1" >/dev/null 2>&1; }
 
-# Link a skill folder into every agent skills dir that exists, never replacing a real folder.
-link_skill() {
-  local name=$1 src=$2 d
-  for d in "$HOME/.claude/skills" "$HOME/.config/opencode/skills" "$HOME/.agents/skills"; do
-    [ -d "$(dirname "$d")" ] || continue
-    mkdir -p "$d"
-    if [ -e "$d/$name" ] || [ -L "$d/$name" ]; then ok "skill $name already in $d"
-    else ln -s "$src" "$d/$name"; ok "linked skill $name into $d"; fi
-  done
-}
 
 check() {
   step "status"
@@ -111,37 +101,12 @@ else
   command -v npm >/dev/null || { echo "npm required: brew install node"; exit 1; }
   npm install -g agent-browser
 fi
-AB_SKILL="$(npm root -g)/agent-browser/skills/agent-browser"
-[ -d "$AB_SKILL" ] && link_skill agent-browser "$AB_SKILL" || miss "agent-browser skill folder not found in the npm package"
 
-# ---------------------------------------------------------------- MCP wiring
-# cua-driver is an MCP server; agent-browser is a CLI the skill teaches, so it needs no MCP.
-step "MCP: cua-driver for Claude Code and OpenCode"
-if command -v claude >/dev/null; then
-  if claude mcp list 2>/dev/null | grep -q '^cua-driver'; then ok "Claude Code already has it"
-  else claude mcp add --scope user cua-driver -- "$BIN" mcp && ok "added to Claude Code (user scope)"; fi
-else miss "Claude Code not installed; later: claude mcp add --scope user cua-driver -- $BIN mcp"; fi
-
-OC="$HOME/.config/opencode/opencode.jsonc"; [ -f "$OC" ] || OC="$HOME/.config/opencode/opencode.json"
-if [ -d "$HOME/.config/opencode" ]; then
-  python3 - "$OC" "$BIN" <<'PY'
-import json, os, sys
-path, binp = sys.argv[1], sys.argv[2]
-raw = open(path).read() if os.path.exists(path) else '{"$schema": "https://opencode.ai/config.json"}'
-try:
-    cfg = json.loads(raw)
-except ValueError:  # has comments: don't rewrite a hand-edited file
-    print(f"  • {path} has comments; add under \"mcp\": \"cua-driver\": {{\"type\": \"local\", \"command\": [\"{binp}\", \"mcp\"]}}")
-    sys.exit(0)
-mcp = cfg.setdefault("mcp", {})
-if "cua-driver" in mcp:
-    print("  ✓ OpenCode already has it")
-else:
-    mcp["cua-driver"] = {"type": "local", "command": [binp, "mcp"]}
-    open(path, "w").write(json.dumps(cfg, indent=2) + "\n")
-    print(f"  ✓ added to OpenCode ({path})")
-PY
-else miss "OpenCode not installed; skipped"; fi
+# ------------------------------------------------- MCP servers and skill links
+# Not done here any more. agent-tools/registry.toml is the one list of MCP servers and skills, and
+# setup.sh's `wiring` step writes it into Claude Code, OpenCode, agy and ~/.agents (D3, 2026-10-07).
+step "MCP servers + skills"
+echo "  → agent-tools/setup.sh --profile-from aibo-server --only wiring   (reads agent-tools/registry.toml)"
 
 # -------------------------------------------------------------- Agent Chrome
 if [ $AGENT_CHROME = 1 ]; then
