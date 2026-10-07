@@ -56,7 +56,7 @@ Environment variables override `~/.config/stuck-watch/config` (`KEY=VALUE` lines
 
 | Key | Default | |
 |---|---|---|
-| `NTFY_URL`, `NTFY_TOPIC`, `NTFY_TOKEN` | borrowed from an installed mcp-tools LaunchAgent | where pushes go (same bus as mcp-tools' `notify`). Pass them to `install.sh` as env vars to store them in the config. Without any, alerts only go to the log. |
+| `NTFY_URL`, `NTFY_TOPIC`, `NTFY_TOKEN` | URL/topic borrowed from an installed mcp-tools LaunchAgent; on macOS the token comes from the Keychain mirror of keys.env (`fleet-secret`), since plists no longer carry it (D4) | where pushes go (same bus as mcp-tools' `notify`). Pass them to `install.sh` as env vars to store them in the config. Without any, alerts only go to the log. |
 | `STUCK_WATCH_AGENTS` | `claude,opencode,codex,cptr` | process names (argv[0] or one of the first argv words) that count as agents |
 | `STUCK_WATCH_MINUTES` | `3` | file operations idle this long are stuck |
 | `STUCK_WATCH_OTHER_MINUTES` | `15` | any other agent command |

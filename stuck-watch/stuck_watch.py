@@ -26,6 +26,7 @@ See README.md for every key.
                               to judge CPU growth, so it only flags things that are clearly stuck)
     stuck_watch.py --dry-run  like the default, but log instead of notifying
 """
+import base64
 import ctypes
 import json
 import os
@@ -107,6 +108,20 @@ PROTECTED = re.compile(r"(Downloads|Desktop|Documents|Library/Mobile Documents|i
                        r"Pictures|Photos|Movies|Music|Library/Mail|Library/Messages|Library/Safari)")
 
 
+def keychain_secret(name):
+    """A secret from the macOS Keychain mirror of keys.env (service "personal-agent", base64; written
+    by fleet-secret). Read through /usr/bin/security, which the items trust, so a launchd job without
+    Documents access gets it without a prompt (D4, 2026-10-07: tokens no longer sit in plists)."""
+    try:
+        out = subprocess.run(["/usr/bin/security", "find-generic-password", "-s", "personal-agent", "-a", name, "-w"],
+                             capture_output=True, text=True, timeout=10)
+        if out.returncode == 0 and out.stdout.strip():
+            return base64.b64decode(out.stdout.strip()).decode()
+    except Exception:
+        pass
+    return None
+
+
 def mcp_tools_env():
     """EnvironmentVariables of an installed agent-tools mcp-tools LaunchAgent, if any."""
     agents = os.path.join(HOME, "Library", "LaunchAgents")
@@ -142,6 +157,8 @@ def ntfy_config():
     if not url:
         env = mcp_tools_env()
         url, topic, token = env.get("NTFY_URL"), env.get("NTFY_TOPIC"), env.get("NTFY_TOKEN")
+    if url and not token:
+        token = keychain_secret("NTFY_TOKEN")
     return url, topic or "aibo", token
 
 

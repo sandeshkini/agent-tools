@@ -61,12 +61,40 @@ from pydantic import BaseModel, Field
 # lands in the schema other machines' agents see — verified the same way after this change. Keep
 # using it for every new/edited parameter here, not docstring `:param` prose alone.
 
+def _secret(name: str) -> str:
+    """A secret from the environment; on a host install (no Docker) fall back to the fleet store, so
+    LaunchAgents don't have to carry tokens (D4, 2026-10-07): ~/Documents/secrets/keys.env, then
+    the macOS Keychain mirror (service "personal-agent", base64), the same order as fleet-secret."""
+    v = os.getenv(name, "")
+    if v:
+        return v
+    import base64, re, subprocess
+    try:
+        for line in open(os.path.expanduser(os.getenv("FLEET_SECRETS_FILE", "~/Documents/secrets/keys.env"))):
+            m = re.match(rf"\s*(?:export\s+)?{re.escape(name)}=(.*)$", line.rstrip("\n"))
+            if m:
+                v = m.group(1).strip()
+                if len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"":
+                    v = v[1:-1]
+        if v:
+            return v
+    except OSError:
+        pass
+    try:
+        out = subprocess.run(["/usr/bin/security", "find-generic-password", "-s", "personal-agent", "-a", name, "-w"],
+                             capture_output=True, text=True, timeout=10)
+        if out.returncode == 0 and out.stdout.strip():
+            return base64.b64decode(out.stdout.strip()).decode()
+    except Exception:
+        pass
+    return ""
+
 ARTIFACTS_API = os.getenv("ARTIFACTS_API", "http://artifacts:8080/api/publish")
 _ARTIFACTS_BASE = ARTIFACTS_API.rsplit("/api/", 1)[0]
 ARTIFACTS_CREATE_API = f"{_ARTIFACTS_BASE}/api/artifacts"
 ARTIFACTS_LIST_API = f"{_ARTIFACTS_BASE}/api/list"
 ARTIFACTS_FILES_API = f"{_ARTIFACTS_BASE}/api/publish-files"
-PUBLISH_TOKEN = os.getenv("PUBLISH_TOKEN", "")
+PUBLISH_TOKEN = _secret("PUBLISH_TOKEN")
 # Per-file / per-bundle caps for publish_files — generous (these are real binaries now, not
 # hand-typed text) but bounded so one runaway call can't hang the request or the server.
 MAX_FILE_BYTES = 25 * 1024 * 1024
@@ -88,7 +116,7 @@ ORIGIN_LABEL = f"{SOURCE_LABEL}@{COMPUTER_LABEL}" if COMPUTER_LABEL != "unknown"
 PUBLIC_BASE = os.getenv("PUBLIC_BASE", "http://localhost:8080")
 NTFY_BASE = os.getenv("NTFY_URL", "http://ntfy").rstrip("/")
 NTFY_TOPIC = os.getenv("NTFY_TOPIC", "aibo")
-NTFY_TOKEN = os.getenv("NTFY_TOKEN", "")
+NTFY_TOKEN = _secret("NTFY_TOKEN")
 
 # 0.0.0.0 is correct (and required) inside Docker, where only the compose port mapping
 # (127.0.0.1:8009:8000, loopback-only) actually exposes it. Running this directly on a host
