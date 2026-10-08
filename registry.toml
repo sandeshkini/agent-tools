@@ -78,6 +78,11 @@ args = ["run", "PA_API_TOKEN", "--", "{personal_agent}/systems/email/.venv/bin/p
 # fleet (the Chief's control panel) is deliberately NOT here: it stays registered only in the Chief's
 # own workspace, cos/agent/.mcp.json (D6).
 
+[mcp.crew]                             # agents talk to their Chief of Staff: report, ask, reply, whoami
+machines = ["aibo-mac", "aibo-linux"]  # (cos merge, 2026-10-08). Runs the cos node's crew-proxy.py, which
+command = "/usr/bin/python3"           # passes CLAUDE_CODE_SESSION_ID to the local node (127.0.0.1:8790/crew);
+args = ["{home}/.local/share/cos-node/crew-proxy.py"]  # the node maps it to the chat. Machines need cos-node >= 0.3.
+
 # --------------------------------------------------------------------------------------- skills
 # Every skill the agents get, shared and machine-specific alike. Our own skills live in
 # agent-tools/skills/<name>/SKILL.md (one folder, both machines); limit one to a machine with
