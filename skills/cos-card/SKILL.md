@@ -6,7 +6,7 @@ description: Write a "cos-card" at the end of a reply so Sandesh's Chief of Staf
 # cos-card: your own update card
 
 Every agent chat on aibo-mac and aibo-linux shows up as an **update card** in Sandesh's Chief of Staff
-panel (`apps.personal.kingdomofluna.com/cos`). Normally a model writes a one-line summary of your last
+panel (`cos.personal.kingdomofluna.com`). Normally a model writes a one-line summary of your last
 reply. If your reply **ends with a `cos-card` block**, the panel shows your card instead: your words,
 your numbers, and buttons he can tap to answer you.
 
