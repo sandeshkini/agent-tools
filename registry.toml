@@ -109,6 +109,10 @@ machines = ["*"]
 path = "{agent_tools}/skills/cos-card"
 machines = ["aibo-linux", "aibo-mac"]
 
+[skills.cos-ui]                        # richer native UI in the panel (built from apps/cos: scripts/build_skill.py)
+path = "{agent_tools}/skills/cos-ui"
+machines = ["aibo-linux", "aibo-mac"]
+
 [skills.cua-driver]                    # vendor skill, updated by `cua-driver skills update`
 path = "{home}/.cua-driver/skills/cua-driver"
 os = ["darwin"]

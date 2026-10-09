@@ -99,3 +99,10 @@ Nothing to do. The Dropbox token is revoked as planned.
 - The opening and closing fences go **on their own lines**. Don't write the fence name inline in
   prose (e.g. when talking about cards): the panel would read it as an empty card.
 - Plain words, no jargon, no internal ids or paths unless he needs them.
+
+## cos-card or cos-ui?
+
+A `cos-card` is one fixed shape: a note, a link, up to 3 buttons, a stats row. When the result has more
+structure than that (several items each with a state, a table, numbers he'd want side by side, a choice
+he'd tweak with a slider or form, or live data such as agents or today's habits), write a ```cos-ui
+block instead (the `cos-ui` skill). Whichever block comes last in your reply becomes your update card.

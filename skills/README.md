@@ -11,6 +11,7 @@ own list, Codex) and `~/.gemini/config/skills` (agy).
 | Skill | Machines | What it's for |
 |---|---|---|
 | [`cos-card`](cos-card/SKILL.md) | aibo-linux, aibo-mac | End a reply with a card for the Chief of Staff panel |
+| [`cos-ui`](cos-ui/SKILL.md) | aibo-linux, aibo-mac | Native UI blocks in the Chief of Staff panel (stats, tables, forms, live data). Generated: edit apps/cos `docs/cos-ui-skill.md`, run `scripts/build_skill.py --out …` |
 | [`agy`](agy/SKILL.md) | all (not agy itself) | Ask Antigravity a one-shot question through `agy-ask` |
 | [`ui-check`](ui-check/SKILL.md) | all | Screenshot UI changes at desktop/phone, light/dark, and look |
 | [`linux-operator`](linux-operator/SKILL.md) | aibo-linux | Operate aibo-linux: GNOME desktop, its Chrome, services, cptr |
