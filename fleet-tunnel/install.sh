@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # fleet-tunnel: one job that holds this machine's SSH tunnels to aibo-linux, separate from cos-node.
-# Decided by Sandesh on 2026-10-07 (D5). Today only aibo-mac needs it, for two forwards:
+# Decided by Sandesh on 2026-10-07 (D5). Today only aibo-mac needs it, for three forwards:
 #   127.0.0.1:8012 -> aibo-linux 127.0.0.1:8012   shared memory (Graphiti MCP)
 #   127.0.0.1:8791 -> aibo-linux 127.0.0.1:8790   aibo-linux's cos node (the Chief's hub dials it)
+#   127.0.0.1:8793 -> aibo-linux 127.0.0.1:8793   cos agent messaging (agent-tools/messaging, 2026-10-09)
 #
 # It logs in with its own key (default ~/.ssh/cos_tunnel_ed25519). On aibo-linux that key is allowed
 # to open exactly these tunnels and nothing else (D9; see authorize.sh). Sandesh's own key stays
@@ -15,14 +16,14 @@
 #   fleet-tunnel/install.sh                 install / update (macOS LaunchAgent, Linux systemd --user)
 #   fleet-tunnel/install.sh --check         status: job loaded? ports listening? memory answering?
 #   fleet-tunnel/install.sh --uninstall     remove the job (cos-node --tunnel flags can take over again)
-# Env: FLEET_TUNNEL_KEY, FLEET_TUNNEL_FORWARDS ("8012:8012 8791:8790"), FLEET_TUNNEL_HOST (aibo-linux)
+# Env: FLEET_TUNNEL_KEY, FLEET_TUNNEL_FORWARDS ("8012:8012 8791:8790 8793:8793"), FLEET_TUNNEL_HOST (aibo-linux)
 # Docs: aibo-server/infrastructure/agents/tools.md#tunnels
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 AT="$(cd "$HERE/.." && pwd)"
 HOSTALIAS="${FLEET_TUNNEL_HOST:-aibo-linux}"
 KEY="${FLEET_TUNNEL_KEY:-$HOME/.ssh/cos_tunnel_ed25519}"
-FORWARDS="${FLEET_TUNNEL_FORWARDS:-8012:8012 8791:8790}"
+FORWARDS="${FLEET_TUNNEL_FORWARDS:-8012:8012 8791:8790 8793:8793}"
 DIR="$HOME/.ssh/fleet-tunnel"
 LABEL="com.sandesh.fleet-tunnel"
 UNIT="fleet-tunnel.service"

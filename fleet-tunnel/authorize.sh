@@ -10,7 +10,7 @@
 #   ssh aibo-linux '~/Documents/personal/agent-tools/fleet-tunnel/authorize.sh "'"$(cat ~/.ssh/cos_tunnel_ed25519.pub)"'"'
 set -euo pipefail
 AK="$HOME/.ssh/authorized_keys"
-OPTS='restrict,port-forwarding,permitopen="127.0.0.1:8012",permitopen="127.0.0.1:8790",command="/bin/false"'
+OPTS='restrict,port-forwarding,permitopen="127.0.0.1:8012",permitopen="127.0.0.1:8790",permitopen="127.0.0.1:8793",command="/bin/false"'
 
 if [ "${1:-}" = "--show" ]; then grep -n 'permitopen=' "$AK" || echo "(none)"; exit 0; fi
 KEY="${1:-}"
@@ -24,5 +24,5 @@ cp -p "$AK" "$AK.bak-$(date +%Y%m%d-%H%M%S)"
 grep -v -F "$BODY" "$AK" | awk -v c="$COMMENT" '{ n=split($0,a," "); if (a[n]==c) next; print }' > "$AK.new" || true
 echo "$OPTS $KEY" >> "$AK.new"
 chmod 600 "$AK.new"; mv "$AK.new" "$AK"
-echo "trusted $COMMENT ($(echo "$KEY" | ssh-keygen -lf - | awk '{print $2}')) for tunnels to :8012 and :8790 only"
+echo "trusted $COMMENT ($(echo "$KEY" | ssh-keygen -lf - | awk '{print $2}')) for tunnels to :8012, :8790 and :8793 only"
 echo "record it: fleet-secret set SSH_COS_TUNNEL_KEY_FINGERPRINT <that SHA256:...> (on both machines)"
