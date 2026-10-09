@@ -1,0 +1,19 @@
+{
+  "_comment": "The personal Chief of Staff's agent-messaging service (cos hub/messaging_service.py). Owner, Chief name and messaging rules; no secrets (MESSAGING_TOKEN comes from .env).",
+  "instance": "personal",
+  "owner": {
+    "name": "Sandesh",
+    "label": "Sandesh"
+  },
+  "brand": {
+    "name": "Chief of Staff",
+    "short": "Chief"
+  },
+  "messaging": {
+    "mode": "star",
+    "allow_pairs": [],
+    "max_hops": 3,
+    "per_agent_per_hour": 10,
+    "open_asks_per_agent": 3
+  }
+}

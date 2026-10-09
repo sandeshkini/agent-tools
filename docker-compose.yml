@@ -3,6 +3,7 @@ name: agent-tools
 #   • artifacts  — the publish board          → artifacts.kingdomofluna.com (write: push.artifacts.kingdomofluna.com)
 #   • ntfy       — the phone push bus          → ntfy.kingdomofluna.com  (host :8095)
 #   • mcp-tools  — shared MCP: publish_artifact + notify (cptr consumes it at 127.0.0.1:8009/mcp)
+#   • messaging  — cos agent messaging (message log, rules, crew tools), 127.0.0.1:8793 (messaging/README.md)
 #   • memory     — shared agent memory: Graphiti (temporal knowledge graph) + FalkorDB, MCP at
 #                  127.0.0.1:8012/mcp/ (see memory/README.md). Other machines reach it over SSH.
 # `apps` network name is legacy (from when Traefik fronted everything on apps.kingdomofluna.com,
@@ -50,6 +51,23 @@ services:
       - ${NTFY_DATA:-./ntfy/data}/lib:/var/lib/ntfy
       - ${NTFY_DATA:-./ntfy/data}/cache:/var/cache/ntfy
     networks: [default, apps]   # Traefik labels removed 2026-08-16 — dead weight, Pangolin has targeted localhost:8095 directly since Traefik was removed 2026-08-15
+
+  messaging:
+    # cos agent messaging (message log, rules, agents' crew tools); see messaging/README.md
+    build:
+      context: ../apps/cos
+      dockerfile: Dockerfile.messaging
+    image: agent-tools/messaging
+    container_name: messaging
+    restart: unless-stopped
+    environment:
+      MESSAGING_TOKEN: "${COS_MESSAGING_TOKEN}"
+      TZ: "${TZ:-America/Toronto}"
+    ports:
+      - "127.0.0.1:8793:8000"
+    volumes:
+      - ./messaging/data:/data
+      - ./messaging/config.json:/config/messaging.json:ro
 
   mcp-tools:
     build: ./mcp-tools
