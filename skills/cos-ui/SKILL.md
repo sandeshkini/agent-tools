@@ -24,8 +24,8 @@ renders while you stream it, so write it top to bottom like normal text.
 - **Props are literals** (`"text"`, `{42}`, `{true}`, `{["a","b"]}`, `{[{text: "x", done: true}]}`)
   **or a small expression** over the block's state (`{seats * 49}`, see below). No functions, no
   JavaScript. Anything not in the catalog is dropped (he sees "n parts skipped").
-- **Images**: only `https://artifacts.kingdomofluna.com/…` URLs or cptr files
-  (`api/file/<node>/<file>`).
+- **Images**: only `https://artifacts.kingdomofluna.com/…` URLs, cptr files (`api/file/<node>/<file>`), or a
+  screenshot you were shown, by its path (`/private/tmp/claude-…/<session>/images/<n>.png`).
 - **Code inside the block**: open the block with **four** backticks (` ````cos-ui ` … ` ```` `); then
   ` ``` ` code fences inside it are fine. With three, a ` ``` ` line would close the block.
 - Self-closing components (`Stat`, `Progress`, `Table`, `Checklist`, `Image`, `Divider`) end with `/>`.
@@ -124,6 +124,37 @@ block when a live component shows them.
   `<lifeos.Bills days={days}/>` refetches as he moves it.
 - While loading it shows a quiet placeholder; if the source is down: "Couldn't load …" with a retry.
   Nothing else to handle. Live components are self-closing (`/>`) and never take children.
+
+## Mini apps (cos-app)
+
+When the catalog can't do it (a small game, a simulator, a custom chart or interaction), write a
+` ````cos-app ` block instead: a small self-contained HTML document (HTML + CSS + JS, inline) that the
+panel runs in a locked box. **Only then**: anything the catalog can draw belongs in a cos-ui block.
+
+`````
+````cos-app
+{"title": "Bouncy balls", "height": 360}
+<canvas id="c"></canvas>
+<script>/* … */</script>
+````
+`````
+
+- **Open it with four backticks** (` ````cos-app ` … ` ```` `), so a ` ``` ` inside your JS can't end it.
+- **Header** (optional, first line): `{"title": "…", "height": 120–900 (px, default 320) or "auto", "aspect": "16:9"}`.
+  `"auto"` sizes the box to your content.
+- **Self-contained, no network.** No fetch/XHR/WebSocket, no outside scripts, styles, fonts or images
+  (they're blocked); images as `data:` URLs. **Put the data inline** in the script. It can't read cos,
+  the owner's data or cookies, and it can't open windows, submit forms or navigate (if it navigates
+  its own frame, it's stopped). It's sandboxed: `localStorage` throws, so keep state in variables.
+- **Keep it small**: a few KB to tens of KB (the hard cap is 200 KB). Phone first: it's often 360 px wide.
+- **Theme**: CSS variables `--cos-bg`, `--cos-surface`, `--cos-ink`, `--cos-ink-2`, `--cos-ink-3`, `--cos-line`,
+  `--cos-accent`, `--cos-accent-bg`, `--cos-accent-ink`, `--cos-pos`, `--cos-warn`, `--cos-neg`, `--cos-blue`,
+  `--cos-font`, `--cos-radius`; `cos.theme` is `"light"`/`"dark"`, and a `cos-theme` event fires on a switch
+  (re-read the variables then).
+- **The `cos` helper**: `cos.resize(px)` / `cos.fit()` (resize the box to the content), and
+  `cos.send("…")`: suggests a message for the chat the app is in. Sandesh sees the exact text, a tap
+  puts it in the message box, and he sends it himself; it's never sent by itself. Write it as the full instruction.
+- It runs only after Sandesh taps **Run** once for it, and never while you're still writing it.
 
 ## Examples
 
