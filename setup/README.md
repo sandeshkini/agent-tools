@@ -67,6 +67,8 @@ entry can be limited to some machines (the profile's `[machine] name`), an OS or
 - Skill links in `~/.claude/skills`, `~/.config/opencode/skills`, `~/.agents/skills` (cptr, Codex)
   and `~/.gemini/config/skills` (agy).
 - `bin/` commands (`fleet-secret`, `pa-secret`, `agy-ask`, `ui-shot`) linked into `~/.local/bin`.
+- Instruction files (`[instructions.*]`, e.g. `memory/standing-rules.md`) loaded into every chat: an `@import` in
+  a managed block of `~/.claude/CLAUDE.md` (the rest of the file is left alone) and OpenCode's `instructions` list.
 
 MCP servers and skills that aren't in the registry are reported, not removed, except stale links
 of ours (pointing into agent-tools or personal-agent). Real folders and files are never overwritten.

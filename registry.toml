@@ -22,10 +22,12 @@
 [programs.claude-code]
 mcp = "claude-cli"                     # `claude mcp add/remove --scope user` (~/.claude.json)
 skills = "~/.claude/skills"
+instructions = "claude-md"             # @imports in a managed block of ~/.claude/CLAUDE.md (cptr's Claude chats too)
 
 [programs.opencode]
 mcp = "opencode-json"                  # merges the "mcp" block of ~/.config/opencode/opencode.json[c]
 skills = "~/.config/opencode/skills"
+instructions = "opencode-json"         # the "instructions" list of the same file
 
 [programs.agents-dir]                  # the cross-agent folder: cptr reads it, and so does Codex
 skills = "~/.agents/skills"
@@ -124,6 +126,14 @@ machines = ["aibo-mac"]
 [skills.linux-operator]                # how to operate aibo-linux: desktop, its Chrome, services, cptr
 path = "{agent_tools}/skills/linux-operator"
 machines = ["aibo-linux"]
+
+# ---------------------------------------------------------------------------------- instructions
+# Files loaded into every agent's instructions at the start of each chat (Claude Code, incl. cptr's
+# Claude chats, and OpenCode). Keep them short: they cost context in every chat. agy is left out:
+# it's only asked one-shot questions through agy-ask.
+[instructions.standing-rules]          # Sandesh's checked standing rules (memory review, 2026-10-10)
+path = "{agent_tools}/memory/standing-rules.md"
+machines = ["aibo-linux", "aibo-mac"]
 
 # --------------------------------------------------------------------------------- plugins
 # Claude Code plugins (Claude Code only: OpenCode and agy have no plugins). wiring adds the

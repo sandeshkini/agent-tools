@@ -25,6 +25,7 @@ Memory is plain files with no correctness checks.)
 | Models | OpenRouter (`OPENROUTER_API_KEY` in agent-tools `.env`; source `secrets/keys.env` on aibo-mac). Extraction `google/gemini-3.8-flash` (`MEMORY_MODEL` to change; needs structured outputs), embeddings `openai/text-embedding-3-small` |
 | Memory space | group `personal`. The future work Chief of Staff gets its own group (and server) |
 | `export.py` + `install.sh` | Nightly 01:30 (`memory-export.timer`, systemd --user) → `~/Documents/personal/ai-memory/knowledge/personal/{episodes/YYYY-MM.md, facts.md, superseded.md}`, committed; aibo-linux's 02:30 `backup.sh` pushes it |
+| `standing-rules.md` | Sandesh's short, checked list of standing rules. Loaded into every agent's instructions (`[instructions.standing-rules]` in `registry.toml` → a managed `@import` in `~/.claude/CLAUDE.md` and OpenCode's `instructions`). Memory holds the details; this list is what must never be missed by a search. Changed only when Sandesh says so |
 | `skill/SKILL.md` | The `memory` skill: when to read, what to write, how to correct. Listed as `[skills.memory]` in `registry.toml`; `setup.sh --only wiring` links it into `~/.claude/skills`, `~/.config/opencode/skills`, `~/.agents/skills` and agy's skills folder on both machines |
 | `selftest.py` | Writes two contradicting episodes into a scratch group and checks the old fact is superseded, then clears it |
 
@@ -60,6 +61,22 @@ uv run --with "mcp>=1.12,<2" python memory/selftest.py   # ~2 min, a few cents
 ssh -L 3012:127.0.0.1:3012 beastblaster@192.168.0.146    # then open http://localhost:3012 for the graph browser
 ```
 
-Keeping it sound: the Chief of Staff records Sandesh's decisions as they happen and runs a weekly
-review ("added / superseded this week, confirm?"). Corrections are recorded as new episodes, never
-by editing facts. Deletion only for things that must not be stored.
+## Keeping it sound (memory review, 2026-10-10)
+
+- **Store less.** Only Sandesh's rules and preferences, his decisions (with the reason), commitments,
+  and non-obvious setup. No progress reports, no "pending / waits for his OK" (they never get closed
+  and show up later as stale facts), nothing already in a doc.
+- **One writer.** The agent that heard it from Sandesh records it; agents that get a decision passed
+  on (from the Chief or via crew) don't record it again. Everyone searches before writing. A relayed
+  message says "(saved to memory)" once it's recorded.
+- **Short episodes.** One topic, 1–4 facts, ≤ ~600 characters: above ~1,000 characters extraction
+  yields about half the facts per character.
+- **Closing things.** `Open: X` … later `Done: X (date). Was: open since …`, same words, so Graphiti
+  links them and invalidates the old fact. A "done" note that doesn't name the open item leaves the
+  old fact valid (seen with the Pangolin restart and the keys.env escrow).
+- Corrections are new episodes, never edits. Deletes and merges only with Sandesh's OK.
+- `get_episodes` returns episodes in uuid order, not newest first; use the nightly export for a dated list.
+
+Audit at the time (2026-10-10): 111 episodes, 645 facts, 311 entities in 5 days; ~15 decisions
+recorded twice (Chief + the agent doing the work); 6 stale "pending" facts; extraction with
+`gemini-3.8-flash` at ≈ $0.07 per episode (≈10 LLM calls each), $13.66 in October so far.

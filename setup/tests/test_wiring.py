@@ -10,7 +10,8 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 
 from agentsetup import tomlmini  # noqa: E402
-from agentsetup.components.wiring import Wiring, strip_jsonc, has_comments  # noqa: E402
+from agentsetup.components.wiring import (Wiring, strip_jsonc, has_comments,  # noqa: E402
+                                          claude_md_imports, with_claude_md_imports)
 from agentsetup.core import CHANGE, OK, Context  # noqa: E402
 
 REPO = HERE.parent.parent
@@ -127,6 +128,44 @@ class FleetSecret(unittest.TestCase):
             self.assertNotEqual(self.run_fs(f, "render", os.path.join(d, "t2"), os.path.join(d, "o2")).returncode, 0)
             self.assertNotEqual(self.run_fs(f, "set", "M", stdin="a\nb").returncode, 0)
 
+
+
+class InstructionsPlan(unittest.TestCase):
+    RULES = "/r/memory/standing-rules.md"
+
+    def plan(self, claude_cur, oc_cur):
+        f = facts({"agent-tools": dict(HTTP)}, {"memory": "/r/memory/skill"})
+        f["programs"]["claude-code"].update(instr_kind="claude-md", instr=claude_cur)
+        f["programs"]["opencode"] = {"installed": True, "instr_kind": "opencode-json", "instr": oc_cur}
+        f["want_instr"] = {"standing-rules": {"path": self.RULES, "programs": None}}
+        return wiring().plan(f)
+
+    def test_adds_to_both(self):
+        p = self.plan([], ["/own/AGENTS.md"])
+        self.assertEqual([o["op"] for o in p.data["ops"]], ["claude-md", "opencode-instr"])
+        self.assertEqual(p.data["ops"][1]["list"], ["/own/AGENTS.md", self.RULES])
+
+    def test_in_place(self):
+        self.assertEqual(self.plan([self.RULES], ["/own/AGENTS.md", self.RULES]).status, OK)
+
+    def test_stale_ours_removed_foreign_kept(self):
+        p = self.plan([self.RULES], ["/r/old.md", "/own/AGENTS.md", self.RULES])
+        self.assertEqual(p.data["ops"], [{"op": "opencode-instr", "list": ["/own/AGENTS.md", self.RULES]}])
+
+
+class ClaudeMdBlock(unittest.TestCase):
+    def test_round_trip_keeps_user_text(self):
+        t = with_claude_md_imports("# mine\nkeep me\n", ["/a.md"])
+        self.assertTrue(t.startswith("# mine\nkeep me\n\n"))
+        self.assertEqual(claude_md_imports(t), ["/a.md"])
+        t2 = with_claude_md_imports(t, ["/a.md", "/b.md"])
+        self.assertEqual(claude_md_imports(t2), ["/a.md", "/b.md"])
+        self.assertEqual(t2.count("<!-- /agent-tools instructions -->"), 1)
+        self.assertEqual(with_claude_md_imports(t2, []).strip(), "# mine\nkeep me")
+
+    def test_empty_file(self):
+        self.assertIsNone(claude_md_imports(""))
+        self.assertTrue(with_claude_md_imports("", ["/a.md"]).startswith("<!-- agent-tools"))
 
 if __name__ == "__main__":
     unittest.main()
