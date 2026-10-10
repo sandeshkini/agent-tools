@@ -1,6 +1,7 @@
 ---
 name: cos-card
-description: Write a "cos-card" at the end of a reply so Sandesh's Chief of Staff panel shows your result as a small card (a short Markdown note, optionally a link, up to 3 answer buttons and a row of real numbers) instead of an AI one-liner. Use when you finish a task or need a decision from Sandesh and the outcome fits on a card: what you did or found, the numbers that matter, the choice he has to make.
+description: >-
+  Write a "cos-card" at the end of a reply so Sandesh's Chief of Staff panel shows your result as a small card (a short Markdown note, optionally a link, up to 3 answer buttons and a row of real numbers) instead of an AI one-liner. Use when you finish a task or need a decision from Sandesh and the outcome fits on a card: what you did or found, the numbers that matter, the choice he has to make.
 ---
 
 # cos-card: your own update card

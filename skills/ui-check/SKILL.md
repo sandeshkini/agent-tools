@@ -1,6 +1,7 @@
 ---
 name: ui-check
-description: Look at the UI you just built or changed, the way Sandesh will see it, before saying it's done. Use whenever you change a web app's frontend (LifeOS, dashboards, mockups, artifacts): screenshot it at desktop and phone sizes, in light and dark, read the images, and judge them against the app's design system. Uses ui-shot (agent-browser in the Agent Chrome).
+description: >-
+  Look at the UI you just built or changed, the way Sandesh will see it, before saying it's done. Use whenever you change a web app's frontend (LifeOS, dashboards, mockups, artifacts): screenshot it at desktop and phone sizes, in light and dark, read the images, and judge them against the app's design system. Uses ui-shot (agent-browser in the Agent Chrome).
 ---
 
 # UI check: look before you say "done"
