@@ -182,7 +182,7 @@ change billing or payment settings.
 
 ## LifeOS in the Agent Chrome
 
-Open **`http://lifeos.localhost:5080/lifeos/?tab=<tab>`** (local Traefik, no SSO, reads and
+Open **`http://127.0.0.1:4011/lifeos/?tab=<tab>`** (lifeos-web, local only, no SSO, reads and
 writes). Not `http://127.0.0.1:4000/`: LifeOS is built for the `/lifeos` path and renders
 blank there. `bin/pa-shot lifeos:<tab>` is for screenshots only (read-only proxy).
 
