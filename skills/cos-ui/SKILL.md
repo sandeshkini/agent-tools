@@ -17,7 +17,7 @@ renders while you stream it, so write it top to bottom like normal text.
 - **Real numbers only** in `Stat` / `Progress` (counts, money, sizes, durations), never words.
 - **Headings: `#` at most once, prefer `##`/`###` or a Card title.** No giant headings.
 - **Links go in `url` (Card), `href` or `space` (Link)**, not as raw URLs in text. `space="<pack>:<page>"`
-  opens a pack page inside the panel (e.g. `lifeos:money`, `lifeos:habits`).
+  opens a pack page inside the panel (e.g. `demo:money`, `demo:habits`).
 - **Buttons only send a message**: `send="…"` goes to the Chief as if Sandesh typed it; add
   `thread="<machine>:<chat id>"` to send it into that agent's chat instead. Write `send` as the full
   instruction. Buttons never approve, pay or send anything on his behalf by themselves.
@@ -103,7 +103,7 @@ until he presses a button):
 Some components draw **live data** instead of what you write: never copy numbers or states into a
 block when a live component shows them.
 
-- **`<Agent id="aibo-mac:5dad2d83"/>`**: one agent's card as the board shows it (name, Needs you /
+- **`<Agent id="machine-a:5dad2d83"/>`**: one agent's card as the board shows it (name, Needs you /
   Working / Stalled / Done, what it's doing, when). It changes as the agent does. `note="…"` replaces
   the "what it's doing" line.
 - **`<Agents filter="needs" limit={3}/>`**: the board's own list: `needs` (waiting for him), `running`
@@ -121,7 +121,7 @@ block when a live component shows them.
   and (when it has done/not done) `hideDone`. Args are checked: an unknown arg or a wrong type is
   skipped and noted.
 - Args may be `{expressions}` over the block's state: `<Slider bind="days" …/>` +
-  `<lifeos.Bills days={days}/>` refetches as he moves it.
+  `<demo.Bills days={days}/>` refetches as he moves it.
 - While loading it shows a quiet placeholder; if the source is down: "Couldn't load …" with a retry.
   Nothing else to handle. Live components are self-closing (`/>`) and never take children.
 
@@ -158,11 +158,14 @@ panel runs in a locked box. **Only then**: anything the catalog can draw belongs
 
 ## Examples
 
+`demo.*` below stands for a pack's components and `machine-a:…` for a thread id: use this instance's
+real ones (listed under "Pack components" above).
+
 Finished, with numbers:
 
 ````
 ```cos-ui
-<Card title="Backups: all clean" status="ok" meta="aibo-mac · nightly">
+<Card title="Backups: all clean" status="ok" meta="machine-a · nightly">
 <Row><Stat value="8/8" label="clean nights"/><Stat value="1.2 TB" label="in Backblaze"/><Stat value="0" label="failures"/></Row>
 Last run **03:12**, 41 GB changed.
 <Button send="Run the backup audit again">Run again</Button>
@@ -206,9 +209,9 @@ Progress of a long job, from an agent's chat (button answers that agent):
 
 ````
 ```cos-ui
-<Card title="Photos → new NAS" status="working" thread="aibo-linux:7c41e0aa">
+<Card title="Photos → new NAS" status="working" thread="machine-b:7c41e0aa">
 <Progress value={612} max={980} label="612 of 980 GB copied"/>
-<Button send="Pause the copy until tonight" thread="aibo-linux:7c41e0aa">Pause till tonight</Button>
+<Button send="Pause the copy until tonight" thread="machine-b:7c41e0aa">Pause till tonight</Button>
 </Card>
 ```
 ````
@@ -218,7 +221,7 @@ A checklist with links into the panel:
 ````
 ```cos-ui
 <Checklist items={[{text: "Thermostat to away", done: true}, {text: "Plant watering to Priya", done: false}]}/>
-Bills are in <Link space="lifeos:money">financials</Link>, report: <Link href="https://example.com/report">weekly report</Link>.
+Bills are in <Link space="demo:money">financials</Link>, report: <Link href="https://example.com/report">weekly report</Link>.
 ```
 ````
 
@@ -281,8 +284,8 @@ Live data: what needs him and what's due (no numbers copied):
 ## This morning
 <Agents filter="needs" limit={3}/>
 <Grid cols={2}>
-<lifeos.Habits hideDone/>
-<lifeos.Bills days={7}/>
+<demo.Habits hideDone/>
+<demo.Bills days={7}/>
 </Grid>
 ```
 ````
@@ -292,10 +295,10 @@ One agent's card in an answer, and a look-ahead he can change:
 ````
 ```cos-ui
 The photo copy is waiting on you:
-<Agent id="aibo-linux:7c41e0aa"/>
+<Agent id="machine-b:7c41e0aa"/>
 <State days={7}/>
 <Slider label="Look ahead" bind="days" min={1} max={30} format="plain"/>
-<lifeos.Bills days={days} title="Due in the next {days} days"/>
+<demo.Bills days={days} title="Due in the next {days} days"/>
 ```
 ````
 
