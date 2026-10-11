@@ -129,8 +129,8 @@ machines = ["aibo-linux"]
 
 # ---------------------------------------------------------------------------------- instructions
 # Files loaded into every agent's instructions at the start of each chat (Claude Code, incl. cptr's
-# Claude chats, and OpenCode). Keep them short: they cost context in every chat. agy is left out:
-# it's only asked one-shot questions through agy-ask.
+# Claude chats, and OpenCode). Keep them short: they cost context in every chat. agy is left out
+# of this (it also runs as a trusted builder chat since 2026-10-11, see skills/agy).
 [instructions.standing-rules]          # Sandesh's checked standing rules (memory review, 2026-10-10)
 path = "{agent_tools}/memory/standing-rules.md"
 machines = ["aibo-linux", "aibo-mac"]

@@ -9,7 +9,15 @@ Installed 2026-09-29: `~/.local/bin/agy` (v1.2.13, updates itself; `agy update`)
 as Sandesh's Google account (token in the macOS keychain). Settings and history:
 `~/.gemini/antigravity-cli/`.
 
-## Always use the wrapper
+## Two ways agy runs (2026-10-11)
+
+- **As a builder agent** (a cptr chat on the `agy` profile, chosen by Sandesh or your lead): trusted like Claude
+  Code, full approval, a normal checkout or worktree, with the crew tools (`crew report` etc.). Sandesh's
+  decision: "trust it full", no separate user, no clean HOME, no sandbox. Quota is Google's, not the Claude plan.
+  The adapter is cptr fork patch 21 (`aibo-agy-adapter`; not on the live node until deployed).
+- **As a one-shot helper from another agent** (everything below): through `agy-ask`, read-only, in a scratch folder.
+
+## Always use the wrapper (for one-shot asks)
 
 ```
 agy-ask "Summarise the risks in this plan" --file /tmp/plan.md
@@ -24,7 +32,7 @@ It starts agy in an **empty scratch folder** holding only copies of the `--file`
 stderr if agy was blocked, timed out (`--timeout`, default 300 s) or answered nothing. It
 refuses paths that look like secrets.
 
-**Why not bare `agy -p`:** at sign-in, `/Users/sandesh` (the whole home folder) was trusted
+**Why not bare `agy -p` for a quick question:** at sign-in, `/Users/sandesh` (the whole home folder) was trusted
 as a workspace, and headless agy reads any file under the folder it starts in without asking.
 Started from `~` or `~/Documents` it could read `Documents/secrets/keys.env`.
 
