@@ -21,7 +21,8 @@ that must never be missed by a search. Change a line only when Sandesh says so d
 - Plans on hold go in aibo-server/research/parked/<plan>/. (2026-10-07)
 - Agent chats start with full approval. Default model **Claude Sonnet 5.5 at medium effort** for every agent, in a
   group or not, unless the work needs more. **Every chat, the Chief and all leads included, runs at medium**; high
-  or xhigh only when he asks for it. Saves the Claude plan's limits. (2026-10-06, 2026-10-07, 2026-10-11)
+  or xhigh only when he asks for it. The Chief and the leads stay on Opus 5.5 (at medium). Saves the Claude plan's
+  limits. (2026-10-06, 2026-10-07, 2026-10-11)
 
 **Secrets, logins, money**
 - Each machine has its own ~/Documents/secrets/keys.env (the source of truth, never shared between machines), backed up
