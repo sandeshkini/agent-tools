@@ -1,0 +1,16 @@
+#!/bin/bash
+# Run Claude Code under another person's plan. Invoked through a symlink whose name picks the account:
+#   claude-sneha -> SNEHA_CLAUDE_CODE_OAUTH_TOKEN, claude-amara -> AMARA_CLAUDE_CODE_OAUTH_TOKEN
+# (claude-sandesh / plain claude keep whatever CLAUDE_CODE_OAUTH_TOKEN the caller has). The token is read
+# from the fleet secret store at launch and only lives in this process's environment; it is never written anywhere.
+case "$(basename "$0")" in
+  claude-sneha) name=SNEHA_CLAUDE_CODE_OAUTH_TOKEN ;;
+  claude-amara) name=AMARA_CLAUDE_CODE_OAUTH_TOKEN ;;
+  claude-sandesh) name=CLAUDE_CODE_OAUTH_TOKEN ;;
+  *) echo "claude-account: unknown account for $(basename "$0")" >&2; exit 2 ;;
+esac
+tok="$(fleet-secret get "$name" 2>/dev/null)"
+[ -n "$tok" ] || { echo "claude-account: $name not found in the fleet secret store" >&2; exit 1; }
+export CLAUDE_CODE_OAUTH_TOKEN="$tok"
+unset tok ANTHROPIC_API_KEY
+exec "$HOME/.local/bin/claude" "$@"
