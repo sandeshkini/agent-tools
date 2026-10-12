@@ -18,7 +18,8 @@ renders while you stream it, so write it top to bottom like normal text.
 - **Headings: `#` at most once, prefer `##`/`###` or a Card title.** No giant headings.
 - **Links go in `url` (Card), `href` or `space` (Link)**, not as raw URLs in text. `space="<pack>:<page>"`
   opens a pack page inside the panel (e.g. `demo:money`, `demo:habits`).
-- **Buttons only send a message**: `send="…"` goes to the Chief as if Sandesh typed it; add
+- **Buttons only send a message**: `send="…"` goes to the chat the block is in (your own; the Chief's in
+  the Chief's chat) as if Sandesh typed it; add
   `thread="<machine>:<chat id>"` to send it into that agent's chat instead. Write `send` as the full
   instruction. Buttons never approve, pay or send anything on his behalf by themselves.
 - **Props are literals** (`"text"`, `{42}`, `{true}`, `{["a","b"]}`, `{[{text: "x", done: true}]}`)
@@ -90,7 +91,7 @@ until he presses a button):
 - **Buttons with `{…}` in `send`** send the text as filled in at the moment he presses.
 - **A Form** is a message template: `<Form send="Plan a {nights}-night trip to {city}">` with inputs
   inside and a `<Button>` **without** `send` as its submit. The template is filled with the values as
-  plain text and sent to the Chief (or with `thread="…"`, into that agent's chat) only when he presses
+  plain text and sent to the chat the block is in (or with `thread="…"`, into that agent's chat) only when he presses
   the button. `required` on a TextInput keeps the button off until it's filled. A form never sends
   by itself.
 - **Tabs**: `<Tabs><Tab label="This week">…</Tab><Tab label="Next week">…</Tab></Tabs>`. Add
