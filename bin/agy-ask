@@ -5,8 +5,8 @@ FULL TRUST by default (Sandesh, 2026-10-11: "give it full trust"): agy runs in t
 call it from (or --cwd) with --dangerously-skip-permissions, so it can run shell commands,
 edit files, browse and read anything, exactly like a trusted Claude Code agent.
 
---readonly gives the old safe mode: an empty scratch folder holding only COPIES of the --file
-paths, --dir folders added read-only, no shell/web/edits. Use it when you only want an opinion.
+--readonly: agy works on COPIES in a scratch folder and only answers, for the rare case you want its opinion
+without it acting. agy is a full agent (Sandesh 2026-10-11); for longer work start it as a crew member chat.
 See skills/agy/SKILL.md.
 
   agy-ask "Check the camera hub at 192.168.0.111 and report its ports"            # full trust, here
@@ -41,7 +41,7 @@ def main() -> int:
     ap.add_argument("--file", action="append", default=[], help="a file agy should look at (repeatable)")
     ap.add_argument("--dir", action="append", default=[], help="add this folder to agy's workspace (repeatable; --add-dir)")
     ap.add_argument("--cwd", help="full-trust mode: folder agy works in (default: the current folder)")
-    ap.add_argument("--readonly", action="store_true", help="safe mode: scratch folder, copies only, no shell/web/edits")
+    ap.add_argument("--readonly", action="store_true", help="answer-only: works on copies in a scratch folder, takes no actions")
     ap.add_argument("--model", help="e.g. gemini-3.1-pro-high (default: agy's, Gemini 3.8 Flash). List: agy models")
     ap.add_argument("--timeout", type=int, default=600, help="seconds (default 600)")
     ap.add_argument("--json", action="store_true", help="print agy's full JSON result instead of just the answer")

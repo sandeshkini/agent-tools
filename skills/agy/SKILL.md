@@ -1,6 +1,6 @@
 ---
 name: agy
-description: "Hand Google's Antigravity CLI (agy; Gemini 3.x by default, also Claude and GPT-OSS models) a one-shot task from another agent — full trust by default (it can run commands, edit and browse), or --readonly for a second opinion from a different model family, a review of a plan or diff, or summarising files. Use when Sandesh asks for \"agy\", \"Antigravity\", \"Gemini\" or a second opinion, or when a cross-check by another model would help. Call it through agy-ask: full trust is the default; add --readonly for one-shot second opinions on files you don't want touched."
+description: "Antigravity CLI (agy; Gemini 3.x by default, also Claude and GPT-OSS models) as a first-class agent with the same trust and abilities as Claude Code: give it real work (commands, edits, commits, fixes) and it reports back to you. Run it as a crew member chat (model agent:agy/<id>) for longer tasks, or one-shot via agy-ask. Use when Sandesh asks for agy/Antigravity/Gemini, to parallelise work, or for a different model family."
 ---
 
 # agy (Antigravity CLI) from an agent
@@ -9,44 +9,32 @@ Installed 2026-09-29: `~/.local/bin/agy` (v1.2.13, updates itself; `agy update`)
 as Sandesh's Google account (token in the macOS keychain). Settings and history:
 `~/.gemini/antigravity-cli/`.
 
-## Two ways agy runs (2026-10-11)
+## agy is a full agent (Sandesh, 2026-10-11)
 
-- **As a builder agent** (a cptr chat on the `agy` profile, chosen by Sandesh or your lead): trusted like Claude
-  Code, full approval, a normal checkout or worktree, with the crew tools (`crew report` etc.). Sandesh's
-  decision: "trust it full", no separate user, no clean HOME, no sandbox. Quota is Google's, not the Claude plan.
-  The adapter is cptr fork patch 22 (branch `aibo-agy-adapter`, f78746a; not on a live node until deployed).
-- **As a one-shot helper from another agent** (everything below): through `agy-ask`, **full trust by default**
-  (Sandesh, 2026-10-11: "give it full trust"): it runs in your current folder (or `--cwd`) with
-  `--dangerously-skip-permissions`, so it can run shell commands, edit files, browse and read anything, like a trusted
-  Claude Code agent. `--readonly` gives the old safe mode when you only want an opinion.
+"agy can be trusted ... it should be a first class citizen in terms of agent ability. You run it, it reports to you, but it can do
+everything you do." Same trust and abilities as Claude Code: shell, edits, commits, deploys. Give it real work, not only reviews, and
+don't describe it as untrusted. Quota is Google's, not the Claude plan.
 
-## Use the wrapper (for one-shot tasks)
+**Longer or multi-step work: start it as a crew member** (it gets the crew tools and reports back to you):
+`crew start_member` with `model: agent:agy/gemini-3.1-pro-high` (or `agent:agy/gemini-3.8-flash-medium` for quick jobs). The friendly
+name "agy" doesn't resolve; use the exact `agent:agy/<id>` (ids from `agy models`). Needs cptr fork patch 22 (live on aibo-linux and
+aibo-mac) and an `agy` entry in that cptr's `agents.profiles`.
+
+**One-shot tasks: `agy-ask`** runs it in your folder (or `--cwd`) with full permissions:
 
 ```
-agy-ask "Check the hub at 192.168.0.111 and report its open ports"        # full trust, in the current folder
-agy-ask "Fix the failing test and tell me what you changed" --cwd ~/Documents/personal/apps/lifeos
+agy-ask "Check the hub at 192.168.0.111 and report its open ports"
+agy-ask "Fix the failing test, commit, and tell me what changed" --cwd ~/Documents/personal/apps/lifeos
 agy-ask "Review this diff for bugs" --file /tmp/change.diff --model gemini-3.1-pro-high
-agy-ask "Which of these two is clearer?" --file a.md --file b.md --readonly   # opinion only, scratch folder
-agy-ask "…" --json        # full result: conversation_id, usage, denied_actions
+agy-ask "…" --json        # full result: conversation_id, usage
 ```
 
-Full trust: `--file` paths are named in the prompt (agy reads them where they are); `--dir` adds folders to its
-workspace; default timeout 600 s. `--readonly`: an empty scratch folder with COPIES of the `--file`s, `--dir` added
-read-only, no shell/web/edits, and paths that look like secrets are refused. Exit 1 + a reason on stderr if agy was
-blocked, timed out or answered nothing.
+`--file` paths are named in the prompt; `--dir` adds folders to its workspace; default timeout 600 s. `--readonly` exists for the rare
+case you want its opinion on something without it acting on it.
 
-**Pick the folder deliberately:** in full-trust mode agy works in (and can change) the folder you start it in. Start it
-where the task is, not in `~`.
-
-## What headless agy can do
-
-| Full trust (default) | `--readonly` |
-|---|---|
-| Shell commands, file edits, web, any file | Answer from its own knowledge; read its folder and `--dir` folders only |
-| Verified 2026-10-11: ran port checks and `ip neigh` on aibo-linux and reported correctly | Shell/web/edits/outside reads auto-denied (reports SUCCESS with empty answer; agy-ask turns that into an error) |
-
-Both: pick a model with `--model` (list: `agy models`), JSON output with token usage. Neither reads piped stdin; pass a
-`--file` instead.
+**Long tasks via agy-ask:** a big job can end with an empty `response` (its final message cut off). Resume the same conversation
+and ask it to print its result: `agy -p "Print your result now" --conversation <id> --output-format json --dangerously-skip-permissions`.
+For anything long, prefer a crew member chat.
 
 ## Models
 
@@ -54,7 +42,6 @@ Default: **Gemini 3.8 Flash** (fast, ~2–6 s for short answers). For harder rea
 `--model gemini-3.1-pro-high`. Also offered: `claude-opus-4-6-thinking`, `claude-sonnet-4-6`,
 `gpt-oss-120b-medium`. For a real second opinion pick a different family from the one you are.
 
-## What not to send
+## Data
 
-Whatever you pass goes to Google. No secrets, tokens or keys. No emails, bank or card
-statements, or other personal financial documents unless Sandesh asked for that exact thing.
+Same rules as every agent (see the standing rules): secrets stay in keys.env and never go into configs, memory or docs.
