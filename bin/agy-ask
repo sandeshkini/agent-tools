@@ -1,20 +1,24 @@
 #!/usr/bin/env python3
-"""Ask Antigravity CLI (agy: Gemini, plus Claude/GPT-OSS models) one question, safely.
+"""Hand Antigravity CLI (agy: Gemini, plus Claude/GPT-OSS models) one task from another agent.
 
-agy trusts /Users/sandesh as a workspace and, in headless mode, reads any file under the
-folder it is started in. So never start it in $HOME or a repo with secrets. This wrapper
-starts it in an empty scratch folder holding only COPIES of the files you pass, prints the
-answer, and deletes the folder. See skills/agy/SKILL.md.
+FULL TRUST by default (Sandesh, 2026-10-11: "give it full trust"): agy runs in the folder you
+call it from (or --cwd) with --dangerously-skip-permissions, so it can run shell commands,
+edit files, browse and read anything, exactly like a trusted Claude Code agent.
 
-  agy-ask "Summarise this" --file report.pdf
-  agy-ask "Compare these two" --file a.md --file b.md --model gemini-3.1-pro-high
-  agy-ask "What does this code do?" --dir ~/Documents/personal/apps/lifeos/backend   # read-only
-  agy-ask "Review this diff" --file /tmp/change.diff --json        # full result (usage, id)
+--readonly gives the old safe mode: an empty scratch folder holding only COPIES of the --file
+paths, --dir folders added read-only, no shell/web/edits. Use it when you only want an opinion.
+See skills/agy/SKILL.md.
+
+  agy-ask "Check the camera hub at 192.168.0.111 and report its ports"            # full trust, here
+  agy-ask "Fix the failing test" --cwd ~/Documents/personal/apps/lifeos             # full trust, there
+  agy-ask "Review this diff" --file /tmp/change.diff --readonly --model gemini-3.1-pro-high
+  agy-ask "..." --json        # full result (usage, conversation_id, denied_actions)
 
 Exit 0 with the answer on stdout; exit 1 with the reason on stderr.
 """
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -24,47 +28,67 @@ from pathlib import Path
 SECRET_HINTS = ("secrets", "keys.env", ".env", "id_rsa", "id_ed25519", ".ssh", "Keychain")
 
 
+def run(cmd, cwd, timeout):
+    try:
+        return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout + 30)
+    except subprocess.TimeoutExpired:
+        return None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("prompt")
-    ap.add_argument("--file", action="append", default=[], help="copy this file into the scratch workspace (repeatable)")
-    ap.add_argument("--dir", action="append", default=[], help="let agy READ this folder too (repeatable; --add-dir)")
+    ap.add_argument("--file", action="append", default=[], help="a file agy should look at (repeatable)")
+    ap.add_argument("--dir", action="append", default=[], help="add this folder to agy's workspace (repeatable; --add-dir)")
+    ap.add_argument("--cwd", help="full-trust mode: folder agy works in (default: the current folder)")
+    ap.add_argument("--readonly", action="store_true", help="safe mode: scratch folder, copies only, no shell/web/edits")
     ap.add_argument("--model", help="e.g. gemini-3.1-pro-high (default: agy's, Gemini 3.8 Flash). List: agy models")
-    ap.add_argument("--timeout", type=int, default=300, help="seconds (default 300)")
+    ap.add_argument("--timeout", type=int, default=600, help="seconds (default 600)")
     ap.add_argument("--json", action="store_true", help="print agy's full JSON result instead of just the answer")
     a = ap.parse_args()
 
-    for p in a.file + a.dir:
-        if any(h in p for h in SECRET_HINTS):
-            print(f"agy-ask: refusing to send {p!r} to agy (looks like a secret)", file=sys.stderr)
-            return 1
     if shutil.which("agy") is None:
         print("agy-ask: agy not found (install: see skills/agy/SKILL.md)", file=sys.stderr)
         return 1
 
-    with tempfile.TemporaryDirectory(prefix="agy-ask-") as ws:
-        for f in a.file:
-            src = Path(f).expanduser()
-            if not src.is_file():
-                print(f"agy-ask: no such file: {f}", file=sys.stderr)
-                return 1
-            shutil.copy2(src, Path(ws) / src.name)
-        cmd = ["agy", "-p", a.prompt, "--output-format", "json", "--print-timeout", f"{a.timeout}s"]
-        if a.model:
-            cmd += ["--model", a.model]
-        for d in a.dir:
-            cmd += ["--add-dir", str(Path(d).expanduser().resolve())]
-        try:
-            out = subprocess.run(cmd, cwd=ws, capture_output=True, text=True, timeout=a.timeout + 30)
-        except subprocess.TimeoutExpired:
-            print(f"agy-ask: no answer within {a.timeout}s", file=sys.stderr)
-            return 1
+    cmd = ["agy", "-p", a.prompt, "--output-format", "json", "--print-timeout", f"{a.timeout}s"]
+    if a.model:
+        cmd += ["--model", a.model]
+    for d in a.dir:
+        cmd += ["--add-dir", str(Path(d).expanduser().resolve())]
 
+    if a.readonly:
+        for p in a.file + a.dir:
+            if any(h in p for h in SECRET_HINTS):
+                print(f"agy-ask: refusing to send {p!r} to agy in --readonly mode (looks like a secret)", file=sys.stderr)
+                return 1
+        with tempfile.TemporaryDirectory(prefix="agy-ask-") as ws:
+            for f in a.file:
+                src = Path(f).expanduser()
+                if not src.is_file():
+                    print(f"agy-ask: no such file: {f}", file=sys.stderr)
+                    return 1
+                shutil.copy2(src, Path(ws) / src.name)
+            out = run(cmd, ws, a.timeout)
+    else:
+        cwd = Path(a.cwd).expanduser().resolve() if a.cwd else Path(os.getcwd())
+        if not cwd.is_dir():
+            print(f"agy-ask: no such folder: {cwd}", file=sys.stderr)
+            return 1
+        files = [str(Path(f).expanduser().resolve()) for f in a.file]
+        prompt = a.prompt + ("\n\nFiles to use: " + ", ".join(files) if files else "")
+        cmd[2] = prompt
+        cmd += ["--dangerously-skip-permissions"]
+        out = run(cmd, str(cwd), a.timeout)
+
+    if out is None:
+        print(f"agy-ask: no answer within {a.timeout}s", file=sys.stderr)
+        return 1
     text = out.stdout.strip()
     try:
         res = json.loads(text[text.index("{"):])
     except ValueError:
-        # Not JSON: agy explains itself in plain text (e.g. a denied permission, not signed in).
+        # Not JSON: agy explains itself in plain text (e.g. not signed in).
         print(f"agy-ask: {(text or out.stderr).strip()[:800]}", file=sys.stderr)
         return 1
     if a.json:
@@ -74,7 +98,7 @@ def main() -> int:
     denied = ", ".join(d.get("action", "?") for d in res.get("denied_actions") or [])
     answer = (res.get("response") or "").strip()
     if res.get("status") != "SUCCESS" or not answer:
-        why = f"blocked from: {denied} (headless agy can't run commands, browse, write, or read outside its folder)" if denied else f"{res.get('status')}, empty answer"
+        why = f"blocked from: {denied}" if denied else f"{res.get('status')}, empty answer"
         print(f"agy-ask: {why}", file=sys.stderr)
         return 1
     if denied:
