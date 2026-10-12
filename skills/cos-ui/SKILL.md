@@ -21,7 +21,9 @@ renders while you stream it, so write it top to bottom like normal text.
 - **Buttons only send a message**: `send="…"` goes to the chat the block is in (your own; the Chief's in
   the Chief's chat) as if Sandesh typed it; add
   `thread="<machine>:<chat id>"` to send it into that agent's chat instead. Write `send` as the full
-  instruction. Buttons never approve, pay or send anything on his behalf by themselves.
+  instruction. Buttons never approve, pay or send anything on his behalf by themselves. The button shows
+  its label only (the message is in its tooltip), so make the label a clear answer. `thread` reaches
+  only the chat the block is in, the Chief, or a group's lead (the Chief's own blocks: any agent).
 - **Props are literals** (`"text"`, `{42}`, `{true}`, `{["a","b"]}`, `{[{text: "x", done: true}]}`)
   **or a small expression** over the block's state (`{seats * 49}`, see below). No functions, no
   JavaScript. Anything not in the catalog is dropped (he sees "n parts skipped").
@@ -143,10 +145,11 @@ panel runs in a locked box. **Only then**: anything the catalog can draw belongs
 - **Open it with four backticks** (` ````cos-app ` … ` ```` `), so a ` ``` ` inside your JS can't end it.
 - **Header** (optional, first line): `{"title": "…", "height": 120–900 (px, default 320) or "auto", "aspect": "16:9"}`.
   `"auto"` sizes the box to your content.
-- **Self-contained, no network.** No fetch/XHR/WebSocket, no outside scripts, styles, fonts or images
-  (they're blocked); images as `data:` URLs. **Put the data inline** in the script. It can't read cos,
-  the owner's data or cookies, and it can't open windows, submit forms or navigate (if it navigates
-  its own frame, it's stopped). It's sandboxed: `localStorage` throws, so keep state in variables.
+- **Self-contained: use no network.** No fetch/XHR/WebSocket, no outside scripts, styles, fonts or images
+  (its content policy blocks them); images as `data:` URLs. **Put the data inline** in the script. It can't
+  read cos, the owner's data or cookies, and it can't open windows or submit forms. If it navigates its own
+  frame, the panel stops it, but only after that first request has gone out: the sandbox limits what an app
+  can reach, it isn't a promise that nothing leaves. It's sandboxed: `localStorage` throws, so keep state in variables.
 - **Keep it small**: a few KB to tens of KB (the hard cap is 200 KB). Phone first: it's often 360 px wide.
 - **Theme**: CSS variables `--cos-bg`, `--cos-surface`, `--cos-ink`, `--cos-ink-2`, `--cos-ink-3`, `--cos-line`,
   `--cos-accent`, `--cos-accent-bg`, `--cos-accent-ink`, `--cos-pos`, `--cos-warn`, `--cos-neg`, `--cos-blue`,
