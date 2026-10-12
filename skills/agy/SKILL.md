@@ -1,6 +1,6 @@
 ---
 name: agy
-description: Hand Google's Antigravity CLI (agy; Gemini 3.x by default, also Claude and GPT-OSS models) a one-shot task from another agent — full trust by default (it can run commands, edit and browse), or --readonly for a second opinion from a different model family, a review of a plan or diff, or summarising files. Use when Sandesh asks for "agy", "Antigravity", "Gemini" or a second opinion, or when a cross-check by another model would help. Call it through agy-ask: full trust is the default; add --readonly for one-shot second opinions on files you don't want touched.
+description: "Hand Google's Antigravity CLI (agy; Gemini 3.x by default, also Claude and GPT-OSS models) a one-shot task from another agent — full trust by default (it can run commands, edit and browse), or --readonly for a second opinion from a different model family, a review of a plan or diff, or summarising files. Use when Sandesh asks for \"agy\", \"Antigravity\", \"Gemini\" or a second opinion, or when a cross-check by another model would help. Call it through agy-ask: full trust is the default; add --readonly for one-shot second opinions on files you don't want touched."
 ---
 
 # agy (Antigravity CLI) from an agent
