@@ -115,6 +115,10 @@ machines = ["aibo-linux", "aibo-mac"]
 path = "{agent_tools}/skills/cos-ui"
 machines = ["aibo-linux", "aibo-mac"]
 
+[skills.cos-app-builder]               # build a mini app the cos hub hosts (cos docs/apps.md); installs go to the hub on aibo-mac
+path = "{agent_tools}/skills/cos-app-builder"
+machines = ["aibo-mac"]
+
 [skills.cua-driver]                    # vendor skill, updated by `cua-driver skills update`
 path = "{home}/.cua-driver/skills/cua-driver"
 os = ["darwin"]
