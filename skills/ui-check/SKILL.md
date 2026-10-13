@@ -11,12 +11,10 @@ A build that compiles isn't a UI that works. Every visible change gets looked at
 ## The command
 
 ```
-ui-shot <url | lifeos:<tab>> [--sizes desktop,phone,tablet,wide] [--themes light,dark] [--click "<tab text>"]
+ui-shot <url> [--sizes desktop,phone,tablet,wide] [--themes light,dark] [--click "<tab text>"]
 ```
 
-- `lifeos:<tab>` opens LifeOS on this Mac (tabs: habits, workout, home, projects, year,
-  financials, notes). It goes through a **read-only** local proxy (GET only), because the real URL
-  is behind Pangolin SSO. Screenshots can't change data.
+- For a cos mini app use its hub address, e.g. `http://127.0.0.1:4300/?space=daily:habits` (cos is where LifeOS's pages live now; LifeOS the app was retired 2026-10-13). `cos app preview` shows an app before install.
 - `--click "Markets"` clicks a visible button or tab after load, for sub-tabs.
 - It prints PNG paths (`/tmp/ui-shot/<name>-<size>-<theme>.png`). **Open them with Read and
   actually look.**
@@ -25,18 +23,9 @@ ui-shot <url | lifeos:<tab>> [--sizes desktop,phone,tablet,wide] [--themes light
 
 ## The loop
 
-1. Change the code, then **test the build before it goes live.** Build it as a separate
-   container, e.g. LifeOS:
-   `docker build -t lifeos:test . && docker run -d --name lifeos-test -p 127.0.0.1:4002:4000 -v ~/Documents/personal/docs:/docs:ro lifeos:test`
-   (docs mounted **read-only**; add `PA_API_URL/TOKEN` env for System).
-2. `LIFEOS_UPSTREAM=http://127.0.0.1:4002 ui-shot lifeos:<tab> --sizes desktop,phone --themes light,dark`
-   for **every** tab, not just the one you changed. A **blank** screenshot means the
-   whole app crashed (2026-09-26: a stray `,,` in the TABS array blanked every page; a
-   successful build and a 200 from the API both hid it).
-   Only then deploy: `docker tag lifeos-app lifeos-rollback:<label> && docker compose up -d --build`,
-   and check live that `#root` isn't empty on each tab. Roll back with
-   `docker tag lifeos-rollback:<label> lifeos-app && docker compose up -d --no-build`.
-3. Read every image. Check against `apps/lifeos/design/DESIGN.md`:
+1. Change the code, then **test it before it goes live**: for a mini app, `cos app preview <folder>` (cos-app-builder skill).
+2. `ui-shot <url> --sizes desktop,phone --themes light,dark` for **every** page, not just the one you changed. A **blank** screenshot means the whole app crashed. Only then install.
+3. Read every image. Check against `apps/lifeos/design/DESIGN.md` (kept for the mini apps):
    - nothing overflows the phone width (see the §13 flex `min-width: 0` gotcha)
    - headings are Cabinet Grotesk, body is Satoshi
    - no all-caps labels, no filler text

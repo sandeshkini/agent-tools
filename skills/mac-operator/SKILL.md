@@ -180,11 +180,9 @@ change billing or payment settings.
 - Keyboard `k`/`j` doesn't step between open emails; use the **Newer** / **Older** buttons.
 - Opening an unread email marks it read. Put it back (Mark as unread) unless the task was to read it.
 
-## LifeOS in the Agent Chrome
+## cos apps in the Agent Chrome
 
-Open **`http://127.0.0.1:4011/lifeos/?tab=<tab>`** (lifeos-web, local only, no SSO, reads and
-writes). Not `http://127.0.0.1:4000/`: LifeOS is built for the `/lifeos` path and renders
-blank there. `bin/pa-shot lifeos:<tab>` is for screenshots only (read-only proxy).
+LifeOS was retired 2026-10-13. Its pages are cos mini apps: open **`http://127.0.0.1:4300/?space=<app>:<page>`** (e.g. `daily:habits`, `planning:projects`, `money:money`, local only, no SSO).
 
 ## 1Password in the Agent Chrome (extra)
 
