@@ -94,7 +94,13 @@ Nothing to do. The Dropbox token is revoked as planned.
   ("Keep deleted files for 30 days", not "yes"). Offer real choices only; never a button that makes
   you do something irreversible without a further check.
 - **No headings, tables or images** in the body (they're flattened to plain lines).
-- Valid JSON on the header, one block per reply, at the end.
+- Valid JSON on the header, one block per reply, at the end. The header is **JSON on one line, not YAML**:
+
+  ```
+  Wrong:  title: Backups clean          Right:  {"title": "Backups clean", "status": "ok",
+          stats:                                 "stats": [["8", "nights"]]}
+            - {label: nights, value: 8}
+  ```
 - **Write the card as reply text.** Planning it in your thinking doesn't show it. Do your tool calls
   first, then write the card in your final text, and never point to a card you haven't written.
 - The opening and closing fences go **on their own lines**. Don't write the fence name inline in
