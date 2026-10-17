@@ -47,10 +47,18 @@ profile ("Agent"), data dir `~/Library/Application Support/Google/Chrome-Agent`.
   It reopens after quit, reboot or power cut, with debugging on port **9333**.
   Chrome only prompts "Allow remote debugging?" for the *default* profile, so this
   one never needs a human click.
-- **Use the default agent-browser session.** agent-browser's own guide says to always name a
-  session; on this Mac that's wrong — the default session is the one attached to the Agent Chrome.
+- **Use your own agent-browser session, pinned to your tab** (changed 2026-10-17). Many agents share
+  this one Chrome, and the default session is shared too: another agent moved the active tab under a
+  Wealthsimple run (10-07, 10-12), and one left **iPhone emulation** on, so Scotia's sign-in failed with
+  `generic-error` (save-800, 10-12). Every routine:
+  1. `export AGENT_BROWSER_SESSION=<short routine name>` (so helper scripts like `pa-sheet-type` use it too).
+  2. Open your page with `agent-browser --cdp 9333 --user-agent '<desktop Chrome UA, Macintosh>' --pin-tab open <url>`.
+  3. Check `agent-browser eval 'navigator.userAgent'` says Macintosh, not iPhone, before signing in anywhere.
+  4. Popups, downloads and screenshots need your tab in front: wrap them in `bin/pa-tab-front <url-part> <command>`.
+  5. When done, close your tabs, then `agent-browser close` (closes only your session, not the Agent Chrome).
+  Don't touch the default session's tabs. Examples: `routines/borderless-paystubs`, `routines/drive-files`.
 - **agent-browser config:** `~/.agent-browser/config.json` = `{"cdp": "9333"}`, so the
-  default session always attaches here and never launches a browser of its own.
+  default session attaches here and never launches a browser of its own; a named session needs `--cdp 9333`.
   Check with `agent-browser get cdp-url` (should show `127.0.0.1:9333`).
 - **1Password:** the extension is installed. It talks to the desktop app because
   `Chrome-Agent/NativeMessagingHosts/com.1password.1password.json` is linked to the
