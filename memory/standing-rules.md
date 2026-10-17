@@ -31,8 +31,8 @@ that must never be missed by a search. Change a line only when Sandesh says so d
 - Agents sign in to websites only through 1Password. (2026-10-07)
 - Use low-cost models; core flows and routines run on his Claude plan, not OpenRouter. Each system has its own
   OpenRouter key. (2026-10-07)
-- Splitwise: never add property tax; only expenses dated from 2026-10-01; one-off expenses are his; don't touch the
-  "Amara - Car" entries; "Joint CC" uses the statement balance. (2026-10-08)
+- Splitwise is retired; what's shared with Amara lives in the cos Money app. Never add property tax; one-off expenses
+  are his; "Joint CC" uses the statement balance; Car ($614) and Intact ($708) are his in full. (2026-10-08, 2026-10-17)
 
 **Family**
 - Nextcloud and other family-facing apps: family keep logging in exactly as today, no 2FA for them. Any change to DNS,
