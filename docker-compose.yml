@@ -102,6 +102,10 @@ services:
     # Graphiti MCP server + FalkorDB in one container (official image, pinned).
     # Facts carry valid-from/valid-until; a contradicting fact invalidates the old one instead of
     # deleting it, and every fact links back to the episode (raw text) it came from.
+    # Retired: cos Knowledge is the one knowledge store. The "retired" profile keeps a plain `docker compose up`
+    # from starting it; its data (memory/data, dump.rdb) is kept, and `docker compose --profile retired up -d
+    # memory` brings it back read-only for a lookup.
+    profiles: ["retired"]
     image: zepai/knowledge-graph-mcp:1.1.0-graphiti-0.30.1
     container_name: memory
     restart: unless-stopped
