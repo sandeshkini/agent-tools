@@ -1,0 +1,257 @@
+#!/usr/bin/env python3
+"""fanout — an orchestrator hands a list of small, independent tasks to cheap workers (free DeepSeek on
+OpenCode Zen by default), then a verify command (build, tests, lint) is run and the workers fix their own
+failures. The orchestrator writes only the job file; the workers do the work. See skills/fanout/SKILL.md.
+
+  fanout job.json              # run it
+  fanout job.json --dry-run    # print the plan, change nothing
+  fanout --example             # print an example job file
+
+Job file (JSON). Paths in "files" are relative to "workdir".
+  name      short id, used for the branch and the report folder
+  repo      git repo to work in. A worktree is made next to it on branch fanout/<name> (never your main checkout)
+  base      branch or commit to start from (default HEAD)
+  workdir   subfolder of the worktree the workers run in (default ".")
+  model     opencode model id (default opencode/deepseek-v4.1-flash-free)
+  parallel  workers at once (default 6; the free tier drops requests silently when flooded)
+  rules     text put in front of every task prompt (conventions, what not to touch)
+  tasks     [{"id": "...", "prompt": "...", "files": ["path it may write", ...]}]
+  verify    {"cmd": "...", "cwd": ".", "max_rounds": 4, "error_regex": "(file):(line):..: error: (msg)"}
+            error_regex groups: 1 = file path, 2 = line, 3 = message. Errors in a task's file go back to that task's
+            worker; anything else goes to one worker that may edit all task files.
+  after     [shell commands run once verify passes, e.g. screenshots]
+  commit    true (default): commit only the task files on the branch
+Exit 0 if every task produced its files and verify passed; 1 otherwise. Report: ~/.fanout/runs/<name>-<time>/report.md
+"""
+import argparse
+import concurrent.futures as cf
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+def _find_opencode():
+    for c in (os.environ.get("FANOUT_OPENCODE"), os.path.expanduser("~/.opencode/bin/opencode"),
+              os.path.expanduser("~/.local/bin/opencode"), shutil.which("opencode")):
+        if c and os.path.exists(c):
+            return c
+    return os.path.expanduser("~/.opencode/bin/opencode")
+
+
+OC = _find_opencode()
+DEFAULT_MODEL = "opencode/deepseek-v4.1-flash-free"
+EXAMPLE = {
+    "name": "demo", "repo": "~/Documents/personal/some-repo", "workdir": ".", "parallel": 4,
+    "rules": "Write plain Python 3, stdlib only. Touch only the files you are told to write.",
+    "tasks": [
+        {"id": "slug", "prompt": "Write slug(text) that lowercases and joins words with '-'. Add a test_slug function.",
+         "files": ["util/slug.py"]},
+        {"id": "wrap", "prompt": "Write wrap(text, width) that word-wraps text. Add a test_wrap function.",
+         "files": ["util/wrap.py"]},
+    ],
+    "verify": {"cmd": "python3 -m pytest -q util", "cwd": ".", "max_rounds": 3,
+               "error_regex": "^(\\S+\\.py):(\\d+): (.+)$"},
+    "after": [], "commit": True,
+}
+
+
+def sh(cmd, cwd, env=None, timeout=900):
+    r = subprocess.run(cmd, cwd=cwd, shell=isinstance(cmd, str), capture_output=True, text=True, env=env, timeout=timeout)
+    return r.returncode, (r.stdout + r.stderr)
+
+
+class Run:
+    def __init__(self, job, dry):
+        self.job, self.dry = job, dry
+        self.name = re.sub(r"[^a-zA-Z0-9_-]", "-", job.get("name", "job"))
+        self.model = job.get("model", DEFAULT_MODEL)
+        self.parallel = int(job.get("parallel", 6))
+        self.rules = job.get("rules", "")
+        self.tasks = job["tasks"]
+        self.repo = Path(os.path.expanduser(job["repo"])).resolve()
+        self.tree = self.repo.parent / ("%s-wt-fanout-%s" % (self.repo.name, self.name))
+        self.work = self.tree / job.get("workdir", ".")
+        self.out = Path.home() / ".fanout" / "runs" / ("%s-%s" % (self.name, time.strftime("%Y%m%d-%H%M%S")))
+        self.log = {"name": self.name, "model": self.model, "tasks": {}, "rounds": [], "stray": []}
+        # opencode takes its folder from $PWD, not the process cwd, and refuses writes in a git worktree unless
+        # external_directory is allowed. Both cost a failed first run to find out.
+        self.env = dict(os.environ, PWD=str(self.work),
+                        OPENCODE_CONFIG_CONTENT=json.dumps({"permission": {"external_directory": "allow"}}))
+
+    # -- worktree
+    def setup(self):
+        if self.dry:
+            return
+        if not self.tree.exists():
+            base = self.job.get("base", "HEAD")
+            rc, out = sh(["git", "worktree", "add", "-b", "fanout/" + self.name, str(self.tree), base], self.repo)
+            if rc:  # branch may already exist
+                rc, out = sh(["git", "worktree", "add", str(self.tree), "fanout/" + self.name], self.repo)
+            if rc:
+                sys.exit("could not make the worktree: " + out.strip())
+        self.out.mkdir(parents=True, exist_ok=True)
+
+    # -- one worker
+    def worker(self, prompt, tag):
+        t = time.time()
+        try:
+            r = subprocess.run([OC, "run", "-m", self.model, prompt], cwd=str(self.work), capture_output=True, text=True,
+                               stdin=subprocess.DEVNULL, timeout=int(self.job.get("worker_timeout", 300)), env=self.env)
+            rc, out = r.returncode, r.stdout + r.stderr
+        except subprocess.TimeoutExpired:
+            rc, out = "timeout", ""
+        (self.out / "workers.log").open("a").write("--- %s rc=%s %.0fs\n%s\n" % (tag, rc, time.time() - t, out[-700:]))
+        return rc, time.time() - t
+
+    def task_prompt(self, task):
+        files = ", ".join(task["files"])
+        return ("%s\n\nYou may write ONLY these files (paths relative to the current directory): %s. Do not edit any other file, "
+                "do not run git, and do not run the build or tests (the orchestrator does that).\n\nTask: %s\n\n"
+                "Reply with one line when done." % (self.rules, files, task["prompt"]))
+
+    def missing(self, task):
+        return [f for f in task["files"] if not (self.work / f).exists()]
+
+    # -- stage 1: write
+    def write_all(self):
+        for attempt in range(4):
+            todo = [t for t in self.tasks if self.missing(t)]
+            if not todo:
+                return
+            par = self.parallel if attempt == 0 else max(2, self.parallel // 2)
+
+            def go(task):
+                rc, s = self.worker(self.task_prompt(task), "write:%s" % task["id"])
+                e = self.log["tasks"].setdefault(task["id"], {"attempts": 0, "seconds": 0.0, "fix_rounds": 0})
+                e["attempts"] += 1
+                e["seconds"] = round(e["seconds"] + s, 1)
+            with cf.ThreadPoolExecutor(par) as ex:
+                list(ex.map(go, todo))
+
+    # -- stage 2: verify and fix
+    def verify(self):
+        v = self.job.get("verify")
+        if not v:
+            return True
+        rx = re.compile(v["error_regex"], re.M) if v.get("error_regex") else None
+        for rnd in range(1, int(v.get("max_rounds", 4)) + 2):
+            rc, out = sh(v["cmd"], str(self.work / v.get("cwd", ".")))
+            (self.out / ("verify-%d.log" % rnd)).write_text(out[-20000:])
+            self.log["rounds"].append({"round": rnd, "ok": rc == 0})
+            if rc == 0:
+                return True
+            if rnd > int(v.get("max_rounds", 4)):
+                return False
+            owned, other = {}, []
+            for m in (rx.finditer(out) if rx else []):
+                f, line, msg = m.group(1), m.group(2), m.group(3)
+                task = next((t for t in self.tasks if any(f.endswith(x) for x in t["files"])), None)
+                (owned.setdefault(task["id"], []) if task else other).append("%s:%s %s" % (os.path.basename(f), line, msg))
+            if not owned and not other:
+                other = out.strip().splitlines()[-25:]
+            fixes = []
+            for task in self.tasks:
+                if task["id"] in owned:
+                    fixes.append((task, owned[task["id"]], "fix:%s" % task["id"]))
+            if other:
+                fixes.append(({"id": "_all", "files": [f for t in self.tasks for f in t["files"]]}, other, "fix:_all"))
+
+            def fix(item):
+                task, errs, tag = item
+                p = ("The verify command `%s` fails. Fix it by editing ONLY these files (relative to the current directory): %s. "
+                     "Do not run builds, tests or git. Relevant output:\n%s\n\nReply with one line when done."
+                     % (v["cmd"], ", ".join(task["files"]), "\n".join(errs[:15])))
+                self.worker(p, tag)
+                key = task["id"] if task["id"] in self.log["tasks"] else None
+                if key:
+                    self.log["tasks"][key]["fix_rounds"] += 1
+                else:
+                    self.log["catch_all_fixes"] = self.log.get("catch_all_fixes", 0) + 1
+            with cf.ThreadPoolExecutor(max(1, self.parallel)) as ex:
+                list(ex.map(fix, fixes))
+        return False
+
+    # -- stage 3: after, stray changes, commit
+    def finish(self, verified):
+        if verified:
+            for cmd in self.job.get("after", []):
+                rc, out = sh(cmd, str(self.work))
+                self.log.setdefault("after", []).append({"cmd": cmd, "rc": rc})
+        allowed = set()
+        for t in self.tasks:
+            for f in t["files"]:
+                allowed.add(os.path.normpath(os.path.join(self.job.get("workdir", "."), f)))
+        rc, out = sh(["git", "status", "--porcelain", "-uall"], str(self.tree))
+        for line in out.splitlines():
+            p = line[3:].strip().strip('"')
+            if "__pycache__" in p or p.endswith(".pyc") or ".DS_Store" in p:
+                continue
+            if os.path.normpath(p) not in allowed and not any(os.path.normpath(p).startswith(a + os.sep) for a in allowed):
+                self.log["stray"].append(p)
+        if self.job.get("commit", True):
+            files = [os.path.join(self.job.get("workdir", "."), f) for t in self.tasks for f in t["files"]
+                     if (self.work / f).exists()]
+            if files:
+                sh(["git", "add", "--"] + files, str(self.tree))
+                sh(["git", "commit", "-q", "-m",
+                    "fanout %s: %d tasks by %s\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>"
+                    % (self.name, len(self.tasks), self.model)], str(self.tree))
+
+    def report(self, verified, secs):
+        done = [t["id"] for t in self.tasks if not self.missing(t)]
+        lost = [t["id"] for t in self.tasks if self.missing(t)]
+        lines = ["# fanout %s" % self.name, "", "- model: %s" % self.model, "- worktree: %s (branch fanout/%s)" % (self.tree, self.name),
+                 "- tasks written: %d/%d%s" % (len(done), len(self.tasks), (" (missing: %s)" % ", ".join(lost)) if lost else ""),
+                 "- verify: %s after %d run(s)" % ("PASSED" if verified else "FAILED", len(self.log["rounds"])),
+                 "- total time: %.0fs" % secs, ""]
+        lines += ["| task | write attempts | worker seconds | fix rounds |", "|---|---|---|---|"]
+        for t in self.tasks:
+            e = self.log["tasks"].get(t["id"], {})
+            lines.append("| %s | %s | %s | %s |" % (t["id"], e.get("attempts", 0), e.get("seconds", 0), e.get("fix_rounds", 0)))
+        if self.log.get("catch_all_fixes"):
+            lines += ["", "Catch-all fix rounds (errors not tied to one task): %d" % self.log["catch_all_fixes"]]
+        if self.log["stray"]:
+            lines += ["", "Files changed outside the allowed list (check them): " + ", ".join(self.log["stray"])]
+        text = "\n".join(lines) + "\n"
+        (self.out / "report.md").write_text(text)
+        (self.out / "report.json").write_text(json.dumps(self.log, indent=1))
+        print(text + "\nreport: %s" % (self.out / "report.md"))
+
+
+def main():
+    ap = argparse.ArgumentParser(description="fan tasks out to cheap workers, verify, let them fix")
+    ap.add_argument("job", nargs="?")
+    ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--example", action="store_true")
+    a = ap.parse_args()
+    if a.example:
+        print(json.dumps(EXAMPLE, indent=2)); return 0
+    if not a.job:
+        ap.error("job file required")
+    if not os.path.exists(OC):
+        sys.exit("opencode not found (looked in ~/.opencode/bin, ~/.local/bin, PATH; or set FANOUT_OPENCODE)")
+    job = json.load(open(os.path.expanduser(a.job)))
+    for t in job["tasks"]:
+        if not t.get("files"):
+            sys.exit("task %s has no files" % t.get("id"))
+    run = Run(job, a.dry_run)
+    if a.dry_run:
+        print("worktree %s (branch fanout/%s)\nmodel %s, %d workers at once, %d tasks" % (run.tree, run.name, run.model, run.parallel, len(run.tasks)))
+        for t in run.tasks:
+            print(" -", t["id"], "->", ", ".join(t["files"]))
+        print("verify:", (job.get("verify") or {}).get("cmd", "(none)")); return 0
+    t0 = time.time()
+    run.setup()
+    run.write_all()
+    ok = run.verify()
+    run.finish(ok)
+    run.report(ok, time.time() - t0)
+    return 0 if ok and all(not run.missing(t) for t in run.tasks) else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

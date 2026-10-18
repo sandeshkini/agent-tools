@@ -100,6 +100,11 @@ path = "{agent_tools}/skills/agy"
 machines = ["*"]
 programs = ["claude-code", "opencode", "agents-dir"]
 
+[skills.fanout]                        # fan small tasks out to cheap workers (free DeepSeek), verify, let them fix
+path = "{agent_tools}/skills/fanout"
+machines = ["aibo-linux", "aibo-mac"]
+programs = ["claude-code", "opencode", "agents-dir"]
+
 [skills.ui-check]
 path = "{agent_tools}/skills/ui-check"
 machines = ["*"]
@@ -151,6 +156,7 @@ fleet-secret = "{agent_tools}/bin/fleet-secret"
 pa-secret = "{agent_tools}/bin/fleet-secret"
 agy-ask = "{agent_tools}/bin/agy-ask"
 ui-shot = "{agent_tools}/bin/ui-shot"
+fanout = "{agent_tools}/bin/fanout"
 claude-sneha = "{agent_tools}/bin/claude-account"     # Claude Code on Sneha's plan (cptr profile claude-sneha)
 claude-amara = "{agent_tools}/bin/claude-account"     # ... Amara's (cptr profile claude-amara)
 claude-sandesh = "{agent_tools}/bin/claude-account"   # ... Sandesh's own

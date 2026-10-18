@@ -14,6 +14,7 @@ own list, Codex) and `~/.gemini/config/skills` (agy).
 | [`cos-ui`](cos-ui/SKILL.md) | aibo-linux, aibo-mac | Native UI blocks in the Chief of Staff panel (stats, tables, forms, live data). Generated: edit apps/cos `docs/cos-ui-skill.md`, run `scripts/build_skill.py --out …` |
 | [`cos-app-builder`](cos-app-builder/SKILL.md) | aibo-mac | Build, preview and install a mini app the cos hub hosts (cos `docs/apps.md`) |
 | [`agy`](agy/SKILL.md) | all (not agy itself) | Ask Antigravity a one-shot question through `agy-ask` |
+| [`fanout`](fanout/SKILL.md) | aibo-linux, aibo-mac | Hand independent tasks to cheap parallel workers (free DeepSeek), verify, let them fix (`fanout job.json`) |
 | [`ui-check`](ui-check/SKILL.md) | all | Screenshot UI changes at desktop/phone, light/dark, and look |
 | [`linux-operator`](linux-operator/SKILL.md) | aibo-linux | Operate aibo-linux: GNOME desktop, its Chrome, services, cptr |
 | [`mac-operator`](mac-operator/SKILL.md) | aibo-mac | Operate aibo-mac and its Agent Chrome for routines (1Password, 2FA, Sheets) |
