@@ -1,7 +1,7 @@
 ---
 name: cos-card
 description: >-
-  Write a "cos-card" at the end of a reply so Sandesh's Chief of Staff panel shows your result as a small card (a short Markdown note, optionally a link, up to 3 answer buttons and a row of real numbers) instead of an AI one-liner. Use when you finish a task or need a decision from Sandesh and the outcome fits on a card: what you did or found, the numbers that matter, the choice he has to make.
+  Write a "cos-card" at the end of a reply so Sandesh's Chief of Staff panel shows your result as a small card (a short Markdown note, optionally a link, up to 3 answer buttons and a row of real numbers) instead of an AI one-liner. Use only for a decision Sandesh has to make, a real problem, or a result with numbers he needs, when it fits on a card; finished work is a plain line, not a card.
 ---
 
 # cos-card: your own update card
@@ -11,8 +11,9 @@ panel (`cos.personal.kingdomofluna.com`). Normally a model writes a one-line sum
 reply. If your reply **ends with a `cos-card` block**, the panel shows your card instead: your words,
 your numbers, and buttons he can tap to answer you.
 
-Use one when you've **finished something** or **need a decision**. Skip it for small talk, progress
-chatter, or when the answer is a single sentence.
+Use one only for **a decision Sandesh has to make**, **a real problem**, or **a result with numbers he needs**.
+Finished work is a plain line (and the ledger), not a card. Skip it for small talk, progress chatter, routine
+"done" notes, or when the answer is a single sentence; a final reply is plain text unless it carries a choice for him.
 
 ## Format
 
