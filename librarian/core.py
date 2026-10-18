@@ -71,7 +71,21 @@ def write_atomic(path, text):
     os.replace(tmp, path)
 
 
+def removed_ids():
+    """Facts taken out for good in cos (knowledge_remove): never written back, even if loaded before the removal."""
+    out = set()
+    if os.path.exists(f"{DATA}/removed.jsonl"):
+        for x in open(f"{DATA}/removed.jsonl"):
+            try:
+                out.add(json.loads(x)["id"])
+            except (ValueError, KeyError):
+                pass
+    return out
+
+
 def save(pages, claims):
+    for cid in removed_ids():
+        claims.pop(cid, None)
     os.makedirs(f"{DATA}/claims", exist_ok=True)
     write_atomic(f"{DATA}/pages.json", json.dumps(pages, indent=1, ensure_ascii=False))
     order = sorted(claims.values(), key=lambda c: (not c["id"].split(":")[1].isdigit(), c["id"]))

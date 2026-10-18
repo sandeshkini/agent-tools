@@ -279,7 +279,7 @@ def note_candidates(claims, pages):
         ref = f"note:{n['id']}"
         R.SOURCES[ref] = {"type": "note", "agent": n.get("agent") or "an agent", "group": n.get("group") or "",
                           "machine": n.get("machine") or "", "chat": n.get("chat") or "", "date": (n.get("at") or "")[:10],
-                          "spoke": "his words" if n.get("claim_kind") == "said" else
+                          "spoke": {"said": "his words", "observed": "agent saw"}.get(n.get("claim_kind") or "") or
                           "relayed" + (f" by {n['via']}" if n.get("via") else ""), "night": NIGHT}
         same = claims.get(n.get("same_as") or "")
         if same:
@@ -292,6 +292,32 @@ def note_candidates(claims, pages):
                     "why": n.get("why") or "", "rejected": "", "note": n["id"], "replaces": n.get("replaces") or [],
                     "author": f"{n.get('agent') or 'agent'}@{n.get('machine') or '?'}"})
     return out
+
+
+# ---------------------------------------------------------------- the night's dated export
+def export_changes(before, lo, hi):
+    """changes/<date>.md in the store: what this run added, replaced and settled, and what was removed since the
+    last run, oldest first, in the same words as knowledge_changes. The weekly review reads a week of these."""
+    sys.path.insert(0, os.path.expanduser("~/Documents/personal/apps/cos/hub"))
+    import knowledge as K
+    import knowtools as T
+    st = K.Store(R.ROOT, R.PERSON).load()
+    lines = []
+    for c in sorted((c for cid, c in st.claims.items() if cid not in before), key=lambda c: (c.get("date") or "", c["id"])):
+        lines.append(f"+ added {T.fact_line(st.claim_out(c))}")
+    for c in sorted((c for cid, c in st.claims.items() if before.get(cid) == "current" and c.get("status") != "current"),
+                    key=lambda c: c["id"]):
+        lines.append(f"~ {'resolved' if c['status'] == 'resolved' else 'replaced'} {c['id']} ({c['page']}) by "
+                     f"{c.get('superseded_by') or '?'}: was \"{c['text']}\"")
+    for r in st.removed:
+        if lo <= (r.get("at") or "")[:16] < hi:
+            lines.append(f"- removed {r['id']} ({r.get('page')}): {r.get('why')}, by {r.get('by') or 'someone'}")
+    os.makedirs(f"{R.ROOT}/changes", exist_ok=True)
+    path = f"{R.ROOT}/changes/{hi[:10]}.md"
+    head = "" if os.path.exists(path) else f"# Knowledge changes · {hi[:10]}\n"
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(f"{head}\n## Run {lo} .. {hi} ({len(lines)} changes)\n\n" + ("\n".join(lines) or "Nothing changed.") + "\n")
+    return len(lines)
 
 
 # ---------------------------------------------------------------- run
@@ -314,6 +340,7 @@ def main():
     if "--collect-only" in args:
         return
     pages, claims = R.load()
+    before = {cid: c["status"] for cid, c in claims.items()}
     fixes = fold_fixes(claims)
     notes = note_candidates(claims, pages)
     before = set(claims)
@@ -336,7 +363,8 @@ def main():
            "candidates": len(cands), "ops": stats, "pages": len(pages),
            "current_claims": sum(1 for c in claims.values() if c["status"] == "current"),
            "calls": len(calls), "tokens_in": sum(r["in"] for r in calls), "tokens_out": sum(r["out"] for r in calls),
-           "usd_equiv": round(sum(r.get("usd_equiv") or 0 for r in calls), 2), "minutes": round((time.time() - t0) / 60, 1)}
+           "usd_equiv": round(sum(r.get("usd_equiv") or 0 for r in calls), 2), "minutes": round((time.time() - t0) / 60, 1),
+           "changes": export_changes(before, lo, hi)}
     nights = json.load(open(f"{R.DATA}/nights.json")) if os.path.exists(f"{R.DATA}/nights.json") else []
     R.write_atomic(f"{R.DATA}/nights.json", json.dumps(nights + [rec], indent=1))
     old = json.load(open(f"{R.DATA}/runs.json")) if os.path.exists(f"{R.DATA}/runs.json") else []
