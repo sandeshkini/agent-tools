@@ -17,7 +17,7 @@ own list, Codex) and `~/.gemini/config/skills` (agy).
 | [`ui-check`](ui-check/SKILL.md) | all | Screenshot UI changes at desktop/phone, light/dark, and look |
 | [`linux-operator`](linux-operator/SKILL.md) | aibo-linux | Operate aibo-linux: GNOME desktop, its Chrome, services, cptr |
 | [`mac-operator`](mac-operator/SKILL.md) | aibo-mac | Operate aibo-mac and its Agent Chrome for routines (1Password, 2FA, Sheets) |
-| [`memory`](../memory/skill/SKILL.md) | aibo-linux, aibo-mac | Shared long-term memory (Graphiti). Kept next to the memory service in `../memory/skill` |
+| [`knowledge`](knowledge/SKILL.md) | aibo-linux, aibo-mac | cos Knowledge: look up and note his rules, preferences and decisions (the crew `knowledge_*` tools). Replaced the Graphiti `memory` skill |
 
 ## Linked from elsewhere (registry only)
 

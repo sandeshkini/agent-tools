@@ -41,10 +41,6 @@ skills = "~/.gemini/config/skills"     # agy's global customization root
 url = "http://127.0.0.1:8009/mcp"
 machines = ["*"]
 
-[mcp.memory]                           # shared long-term memory (Graphiti on aibo-linux; tunnel elsewhere)
-url = "http://127.0.0.1:8012/mcp/"
-machines = ["aibo-linux", "aibo-mac"]
-
 [mcp.computer-use-linux]               # desktop control on Linux (GNOME, X11 session on :0)
 os = ["linux"]
 command = "{home}/.local/bin/computer-use-linux"
@@ -80,7 +76,8 @@ args = ["run", "PA_API_TOKEN", "--", "{personal_agent}/systems/email/.venv/bin/p
 # fleet (the Chief's control panel) is deliberately NOT here: it stays registered only in the Chief's
 # own workspace, cos/agent/.mcp.json (D6).
 
-[mcp.crew]                             # agents talk to their Chief of Staff: report, ask, reply, whoami
+[mcp.crew]                             # agents talk to their Chief of Staff (report, ask, reply, whoami), the task
+                                       # board, and cos Knowledge (knowledge_search/read/note/changes/remove)
 machines = ["aibo-mac", "aibo-linux"]  # (cos merge, 2026-10-08). Runs the cos node's crew-proxy.py, which
 command = "/usr/bin/python3"           # passes CLAUDE_CODE_SESSION_ID to the local node (127.0.0.1:8790/crew);
 args = ["{home}/.local/share/cos-node/crew-proxy.py"]  # the node maps it to the chat. Machines need cos-node >= 0.3.
@@ -90,8 +87,8 @@ args = ["{home}/.local/share/cos-node/crew-proxy.py"]  # the node maps it to the
 # agent-tools/skills/<name>/SKILL.md (one folder, both machines); limit one to a machine with
 # `machines` or `os`. Vendor skills stay inside their package and are only linked from here.
 # Index: skills/README.md. Decided by Sandesh 2026-10-07 (D12).
-[skills.memory]
-path = "{agent_tools}/memory/skill"
+[skills.knowledge]                     # cos Knowledge: look up and note his rules and decisions (replaced memory, 2026-10-17)
+path = "{agent_tools}/skills/knowledge"
 machines = ["aibo-linux", "aibo-mac"]
 
 [skills.agent-browser]                 # vendor skill shipped inside the npm package
