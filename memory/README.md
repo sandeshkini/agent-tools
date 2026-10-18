@@ -1,5 +1,12 @@
 # memory — shared long-term memory for every agent
 
+> **Retired.** cos Knowledge is the one knowledge store (agents use the `knowledge` skill and the crew
+> `knowledge_*` tools; the librarian is in `../librarian/`). The container is stopped and kept behind the
+> `retired` compose profile, `memory-export.timer` is disabled, and the data (`data/dump.rdb`, and its B2 copy) is
+> kept. The final export is in `ai-memory/knowledge/personal/` (197 episodes). To look something up:
+> `docker compose --profile retired up -d memory`, then stop it again. `standing-rules.md` stays in this folder
+> because every machine's instructions include it by this path.
+
 One memory for all of Sandesh's personal agents (Claude Code and OpenCode, on aibo-mac and
 aibo-linux, including the Chief of Staff), built on **[Graphiti](https://github.com/getzep/graphiti)**,
 an off-the-shelf temporal knowledge graph, using its official MCP server. Chosen 2026-10-06 because
