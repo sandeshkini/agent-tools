@@ -13,6 +13,8 @@ Job file (JSON). Paths in "files" are relative to "workdir".
   base      branch or commit to start from (default HEAD)
   workdir   subfolder of the worktree the workers run in (default ".")
   model     opencode model id (default opencode/deepseek-v4.1-flash-free)
+  provider  openrouter/ models only: OpenRouter routing (default {"sort": "price"}, cheapest host first)
+  small_model  model for opencode's title calls (default: the job's model; OpenRouter's default is Nano Banana)
   parallel  workers at once (default 6; the free tier drops requests silently when flooded)
   rules     text put in front of every task prompt (conventions, what not to touch)
   tasks     [{"id": "...", "prompt": "...", "files": ["path it may write", ...]}]
@@ -22,6 +24,8 @@ Job file (JSON). Paths in "files" are relative to "workdir".
             worker; anything else goes to one worker that may edit all task files.
   after     [shell commands run once verify passes, e.g. screenshots]
   commit    true (default): commit only the task files on the branch
+The report lists tokens from opencode's log (its cost is a list-price estimate) and, for openrouter/ models,
+the billed USD from the key's usage counter before/after the run.
 Exit 0 if every task produced its files and verify passed; 1 otherwise. Report: ~/.fanout/runs/<name>-<time>/report.md
 """
 import argparse
@@ -60,6 +64,54 @@ EXAMPLE = {
 }
 
 
+def _openrouter_key():
+    """The key opencode uses (its auth.json), else $OPENROUTER_API_KEY, else keys.env. Never printed."""
+    try:
+        k = json.load(open(os.path.expanduser("~/.local/share/opencode/auth.json"))).get("openrouter", {}).get("key")
+        if k:
+            return k
+    except Exception:
+        pass
+    if os.environ.get("OPENROUTER_API_KEY"):
+        return os.environ["OPENROUTER_API_KEY"]
+    try:
+        for line in open(os.path.expanduser("~/Documents/secrets/keys.env")):
+            if line.startswith("OPENROUTER_API_KEY="):
+                return line.split("=", 1)[1].strip().strip('"\'')
+    except Exception:
+        pass
+    return None
+
+
+def billed_usage():
+    """OpenRouter's billed total for the key, in USD (None if unknown). The counter lags a few seconds."""
+    k = _openrouter_key()
+    if not k:
+        return None
+    try:
+        import urllib.request
+        req = urllib.request.Request("https://openrouter.ai/api/v1/key", headers={"Authorization": "Bearer " + k})
+        return float(json.load(urllib.request.urlopen(req, timeout=20))["data"]["usage"])
+    except Exception:
+        return None
+
+
+def opencode_tokens(directory):
+    """Tokens opencode logged for sessions in this folder, and its own cost estimate (list price)."""
+    db = os.path.expanduser("~/.local/share/opencode/opencode.db")
+    if not os.path.exists(db):
+        return None
+    import sqlite3
+    try:
+        c = sqlite3.connect("file:%s?mode=ro" % db, uri=True)
+        r = c.execute("select count(*), sum(tokens_input), sum(tokens_output), sum(tokens_reasoning), "
+                      "sum(tokens_cache_read), sum(cost) from session where directory = ?", (str(directory),)).fetchone()
+        c.close()
+        return dict(zip(("sessions", "input", "output", "reasoning", "cache_read", "estimate_usd"), [x or 0 for x in r]))
+    except Exception:
+        return None
+
+
 def sh(cmd, cwd, env=None, timeout=900):
     r = subprocess.run(cmd, cwd=cwd, shell=isinstance(cmd, str), capture_output=True, text=True, env=env, timeout=timeout)
     return r.returncode, (r.stdout + r.stderr)
@@ -80,8 +132,16 @@ class Run:
         self.log = {"name": self.name, "model": self.model, "tasks": {}, "rounds": [], "stray": []}
         # opencode takes its folder from $PWD, not the process cwd, and refuses writes in a git worktree unless
         # external_directory is allowed. Both cost a failed first run to find out.
-        self.env = dict(os.environ, PWD=str(self.work),
-                        OPENCODE_CONFIG_CONTENT=json.dumps({"permission": {"external_directory": "allow"}}))
+        cfg = {"permission": {"external_directory": "allow"}}
+        if self.model.startswith("openrouter/"):
+            # OpenRouter spreads requests over every host of a model, many 2-15x the listed price; ask for the
+            # cheapest first (it still falls back). opencode's title calls go to its own small model (Nano Banana
+            # on OpenRouter), billed on the same key: keep them on the job's model.
+            mid = self.model.split("/", 1)[1]
+            cfg["provider"] = {"openrouter": {"models": {mid: {"options": {
+                "provider": job.get("provider", {"sort": "price"})}}}}}
+            cfg["small_model"] = job.get("small_model", self.model)
+        self.env = dict(os.environ, PWD=str(self.work), OPENCODE_CONFIG_CONTENT=json.dumps(cfg))
 
     # -- worktree
     def setup(self):
@@ -217,7 +277,21 @@ class Run:
         lines = ["# fanout %s" % self.name, "", "- model: %s" % self.model, "- worktree: %s (branch fanout/%s)" % (self.tree, self.name),
                  "- tasks written: %d/%d%s" % (len(done), len(self.tasks), (" (missing: %s)" % ", ".join(lost)) if lost else ""),
                  "- verify: %s after %d run(s)" % ("PASSED" if verified else "FAILED", len(self.log["rounds"])),
-                 "- total time: %.0fs" % secs, ""]
+                 "- total time: %.0fs" % secs]
+        tok = opencode_tokens(self.work)
+        if tok:
+            self.log["tokens"] = tok
+            lines.append("- tokens (opencode log, %d sessions): %s input, %s output, %s reasoning, %s cache read; "
+                         "list-price estimate $%.3f" % (tok["sessions"], f"{tok['input']:,}", f"{tok['output']:,}",
+                                                        f"{tok['reasoning']:,}", f"{tok['cache_read']:,}", tok["estimate_usd"]))
+        if self.model.startswith("openrouter/") and self.billed0 is not None:
+            time.sleep(15)  # OpenRouter's counter lags
+            b1 = billed_usage()
+            if b1 is not None:
+                self.log["billed_usd"] = round(b1 - self.billed0, 4)
+                lines.append("- billed by OpenRouter: $%.3f (key's usage counter before/after; the key is shared, so "
+                             "anything else using it meanwhile is in here too)" % (b1 - self.billed0))
+        lines.append("")
         lines += ["| task | write attempts | worker seconds | fix rounds |", "|---|---|---|---|"]
         for t in self.tasks:
             e = self.log["tasks"].get(t["id"], {})
@@ -255,6 +329,7 @@ def main():
             print(" -", t["id"], "->", ", ".join(t["files"]))
         print("verify:", (job.get("verify") or {}).get("cmd", "(none)")); return 0
     t0 = time.time()
+    run.billed0 = billed_usage() if run.model.startswith("openrouter/") else None
     run.setup()
     run.write_all()
     ok = run.verify()

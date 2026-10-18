@@ -40,6 +40,15 @@ fanout --example              # a job file to copy
   Default parallel is 6; `fanout` retries missing files up to 3 times at lower parallelism.
 - Worker stalls of minutes were seen on 2026-10-16, none on 10-17. A worker has a 300 s timeout.
 - Free-tier data handling is unknown: don't send private code or personal data through it. Use `model` to switch to a paid one
-  (`openrouter/deepseek/deepseek-v4.1-flash`, about 3 cents a task) when that matters.
+  (`openrouter/deepseek/deepseek-v4.1-flash`) when that matters.
 - OpenCode takes its folder from `$PWD`, not the process cwd, and refuses writes in a git worktree unless `external_directory`
   is allowed. `fanout` handles both; if you wrap `opencode run` yourself, do the same.
+
+## Cost on OpenRouter
+
+- OpenRouter spreads a model's requests over all its hosts; for DeepSeek V4.1 Flash those cost 1-15x the listed price.
+  Unpinned, the iOS experiment (2026-10-18) was billed about 5x opencode's own estimate. `fanout` now asks for the
+  cheapest host first (`provider: {"sort": "price"}`) and keeps opencode's title calls on the job's model (its OpenRouter
+  default is Nano Banana, billed on the same key). Override with the job's `provider` / `small_model`.
+- opencode's `cost` is computed from the list price, not what OpenRouter billed. The report shows it next to the billed
+  delta of the key's usage counter; the key is shared, so a run alongside others gets their spend too.
