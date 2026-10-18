@@ -8,7 +8,7 @@ description: Operate Sandesh's Mac (aibo-mac) and the Agent Chrome for routines 
 Paths below that start with `personal-agent/` are in `~/Documents/personal/personal-agent/`.
 This skill lives in agent-tools (`skills/mac-operator`, aibo-mac only in `registry.toml`).
 
-Sandesh's preferences and rules (read first): `personal-agent/docs/operating-manual/how-sandesh-works.md`.
+Sandesh's preferences and rules (read first): cos Knowledge, `knowledge_read("person/sandesh")` (the `knowledge` skill).
 
 Human-facing map of the whole stack (services, setup, troubleshooting):
 `personal-agent/systems/computer/README.md`.
