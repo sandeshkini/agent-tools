@@ -19,6 +19,11 @@ fanout --example              # a job file to copy
 
 - **tasks**: one per output, each with a `prompt` and the exact `files` it may write. Tasks must not share files.
 - **edit**: `true` on a task that changes files that already exist (a fix): without it, a task runs only when one of its files is missing.
+- **locked**: paths/globs workers may read but never change (tests, contracts). Put back after every worker pass; tries
+  to change one are listed in the report. Use it for tests-first: one run writes the tests, you review them, the next run
+  writes code against them with the tests locked.
+- **forbid**: `[{"pattern": regex, "files": glob, "why": ...}]` checked on every verify; a hit fails it and goes back
+  to that file's worker like a compile error. For rules a build can't see: banned APIs, TODOs left behind, stubs.
 - **rules**: conventions every worker must follow (names, imports, "touch only your files"). Give the worker a sample file to copy
   in the rules or the prompt ("follow cos/Screens/InboxScreen.swift") instead of describing a style.
 - **verify**: the one command that proves it works (`xcodebuild …`, `pytest -q`, `ruff check`). With an `error_regex`

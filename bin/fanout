@@ -22,6 +22,10 @@ Job file (JSON). Paths in "files" are relative to "workdir".
   verify    {"cmd": "...", "cwd": ".", "max_rounds": 4, "error_regex": "(file):(line):..: error: (msg)"}
             error_regex groups: 1 = file path, 2 = line, 3 = message. Errors in a task's file go back to that task's
             worker; anything else goes to one worker that may edit all task files.
+  locked    ["path or glob", ...] workers may read but never change (tests, contracts); restored after every
+            worker pass, and each attempt to change one is logged in the report
+  forbid    [{"pattern": "regex", "files": "glob (default: the task files)", "why": "..."}]: a match counts as a
+            failed verify and goes back to the file's worker, like a compile error
   after     [shell commands run once verify passes, e.g. screenshots]
   commit    true (default): commit only the task files on the branch
 The report lists tokens from opencode's log (its cost is a list-price estimate) and, for openrouter/ models,
@@ -159,6 +163,35 @@ class Run:
         rc, mb = sh(["git", "merge-base", "HEAD", src.strip()], str(self.tree))
         self.base_sha = mb.strip() or "HEAD"
         self.out.mkdir(parents=True, exist_ok=True)
+        self.locked = {}
+        for g in self.job.get("locked", []):
+            for f in sorted(self.work.glob(g)):
+                if f.is_file():
+                    self.locked[f] = f.read_bytes()
+
+    def guard(self, when):
+        """Put locked files back as they were at the start; log what a worker changed."""
+        for f, data in getattr(self, "locked", {}).items():
+            if not f.exists() or f.read_bytes() != data:
+                f.parent.mkdir(parents=True, exist_ok=True)
+                f.write_bytes(data)
+                self.log.setdefault("locked_touched", []).append("%s (%s)" % (f.relative_to(self.work), when))
+
+    def forbidden(self):
+        """Matches of the job's forbid patterns: ["file:line forbidden (why): text"]."""
+        hits = []
+        task_files = [f for t in self.tasks for f in t["files"]]
+        for rule in self.job.get("forbid", []):
+            rx = re.compile(rule["pattern"])
+            files = [str(f.relative_to(self.work)) for f in self.work.glob(rule["files"])] if rule.get("files") else task_files
+            for f in files:
+                path = self.work / f
+                if not path.is_file():
+                    continue
+                for n, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
+                    if rx.search(line):
+                        hits.append("%s:%d: error: forbidden (%s): %s" % (f, n, rule.get("why", rule["pattern"]), line.strip()[:160]))
+        return hits
 
     # -- one worker
     def worker(self, prompt, tag):
@@ -172,11 +205,16 @@ class Run:
         (self.out / "workers.log").open("a").write("--- %s rc=%s %.0fs\n%s\n" % (tag, rc, time.time() - t, out[-700:]))
         return rc, time.time() - t
 
+    def locked_note(self):
+        g = self.job.get("locked")
+        return (" These files are locked (read them, never change them; any change is reverted): %s. If a locked test "
+                "fails, the code is wrong, not the test." % ", ".join(g)) if g else ""
+
     def task_prompt(self, task):
         files = ", ".join(task["files"])
         return ("%s\n\nYou may write ONLY these files (paths relative to the current directory): %s. Do not edit any other file, "
-                "do not run git, and do not run the build or tests (the orchestrator does that).\n\nTask: %s\n\n"
-                "Reply with one line when done." % (self.rules, files, task["prompt"]))
+                "do not run git, and do not run the build or tests (the orchestrator does that).%s\n\nTask: %s\n\n"
+                "Reply with one line when done." % (self.rules, files, self.locked_note(), task["prompt"]))
 
     def missing(self, task):
         gone = [f for f in task["files"] if not (self.work / f).exists()]
@@ -201,6 +239,7 @@ class Run:
                 e["seconds"] = round(e["seconds"] + s, 1)
             with cf.ThreadPoolExecutor(par) as ex:
                 list(ex.map(go, todo))
+            self.guard("write")
 
     # -- stage 2: verify and fix
     def verify(self):
@@ -210,14 +249,20 @@ class Run:
         rx = re.compile(v["error_regex"], re.M) if v.get("error_regex") else None
         for rnd in range(1, int(v.get("max_rounds", 4)) + 2):
             rc, out = sh(v["cmd"], str(self.work / v.get("cwd", ".")))
+            hits = self.forbidden()
+            if hits:
+                out = out + "\n" + "\n".join(hits)
             (self.out / ("verify-%d.log" % rnd)).write_text(out[-20000:])
-            self.log["rounds"].append({"round": rnd, "ok": rc == 0})
-            if rc == 0:
+            self.log["rounds"].append({"round": rnd, "ok": rc == 0 and not hits, "forbidden": len(hits)})
+            if rc == 0 and not hits:
                 return True
             if rnd > int(v.get("max_rounds", 4)):
                 return False
             owned, other = {}, []
-            for m in (rx.finditer(out) if rx else []):
+            frx = re.compile(r"^(\S+):(\d+): error: (forbidden .*)$", re.M)
+            matches = list(rx.finditer(out)) if rx else []
+            matches += list(frx.finditer("\n".join(hits)))
+            for m in matches:
                 f, line, msg = m.group(1), m.group(2), m.group(3)
                 task = next((t for t in self.tasks if any(f.endswith(x) for x in t["files"])), None)
                 (owned.setdefault(task["id"], []) if task else other).append("%s:%s %s" % (os.path.basename(f), line, msg))
@@ -233,8 +278,8 @@ class Run:
             def fix(item):
                 task, errs, tag = item
                 p = ("The verify command `%s` fails. Fix it by editing ONLY these files (relative to the current directory): %s. "
-                     "Do not run builds, tests or git. Relevant output:\n%s\n\nReply with one line when done."
-                     % (v["cmd"], ", ".join(task["files"]), "\n".join(errs[:15])))
+                     "Do not run builds, tests or git.%s Relevant output:\n%s\n\nReply with one line when done."
+                     % (v["cmd"], ", ".join(task["files"]), self.locked_note(), "\n".join(errs[:15])))
                 self.worker(p, tag)
                 if task["id"] != "_all":
                     e = self.log["tasks"].setdefault(task["id"], {"attempts": 0, "seconds": 0.0, "fix_rounds": 0})
@@ -243,6 +288,7 @@ class Run:
                     self.log["catch_all_fixes"] = self.log.get("catch_all_fixes", 0) + 1
             with cf.ThreadPoolExecutor(max(1, self.parallel)) as ex:
                 list(ex.map(fix, fixes))
+            self.guard("fix round %d" % rnd)
         return False
 
     # -- stage 3: after, stray changes, commit
@@ -298,6 +344,12 @@ class Run:
             lines.append("| %s | %s | %s | %s |" % (t["id"], e.get("attempts", 0), e.get("seconds", 0), e.get("fix_rounds", 0)))
         if self.log.get("catch_all_fixes"):
             lines += ["", "Catch-all fix rounds (errors not tied to one task): %d" % self.log["catch_all_fixes"]]
+        if self.log.get("locked_touched"):
+            lines += ["", "Locked files a worker changed (reverted): " + ", ".join(self.log["locked_touched"])]
+        rc, num = sh(["git", "diff", "--numstat", self.base_sha], str(self.tree))
+        if num.strip():
+            rows = [l.split("\t") for l in num.strip().splitlines() if l.count("\t") >= 2]
+            lines += ["", "| file | + | - |", "|---|---|---|"] + ["| %s | %s | %s |" % (r[2], r[0], r[1]) for r in rows]
         if self.log["stray"]:
             lines += ["", "Files changed outside the allowed list (check them): " + ", ".join(self.log["stray"])]
         text = "\n".join(lines) + "\n"
