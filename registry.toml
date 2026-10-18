@@ -81,6 +81,8 @@ args = ["run", "PA_API_TOKEN", "--", "{personal_agent}/systems/email/.venv/bin/p
 machines = ["aibo-mac", "aibo-linux"]  # (cos merge, 2026-10-08). Runs the cos node's crew-proxy.py, which
 command = "/usr/bin/python3"           # passes CLAUDE_CODE_SESSION_ID to the local node (127.0.0.1:8790/crew);
 args = ["{home}/.local/share/cos-node/crew-proxy.py"]  # the node maps it to the chat. Machines need cos-node >= 0.3.
+always_load = true                     # Claude Code: its tools sit in the prompt instead of loading one by one through ToolSearch; the
+                                       # cos hub marks all but report/ask/reply "defer me" (_meta), so only those three are loaded (~0.7k tokens)
 
 # --------------------------------------------------------------------------------------- skills
 # Every skill the agents get, shared and machine-specific alike. Our own skills live in

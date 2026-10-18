@@ -187,6 +187,7 @@ class Wiring(Component):
                 problems.append(f"mcp {name}: can't resolve {', '.join(sorted(missing))} here")
                 continue
             spec["programs"] = e.get("programs")
+            spec["always_load"] = bool(e.get("always_load"))   # Claude Code only: keep the tools in the prompt, not behind ToolSearch
             want_mcp[name] = spec
         for name, e in (reg.get("skills") or {}).items():
             if not self.applies(e):
@@ -221,6 +222,7 @@ class Wiring(Component):
                 else:
                     out[n] = {"type": "stdio", "command": s.get("command"), "args": list(s.get("args") or []),
                               "env": _norm_env(s.get("env"))}
+                out[n]["always_load"] = bool(s.get("alwaysLoad"))
             return out
         if kind == "opencode-json":
             p = self.opencode_path()
@@ -335,6 +337,8 @@ class Wiring(Component):
     def same(cur, want):
         if cur is None or cur.get("disabled"):
             return False
+        if "always_load" in cur and cur["always_load"] != bool(want.get("always_load")):
+            return False   # only Claude Code's reader reports it
         if want["type"] == "http":
             return cur.get("type") == "http" and cur.get("url") == want["url"]
         return (cur.get("type") == "stdio" and cur.get("command") == want["command"]
@@ -457,6 +461,8 @@ class Wiring(Component):
             j = {"type": "http", "url": spec["url"]}
         else:
             j = {"type": "stdio", "command": spec["command"], "args": spec["args"], "env": spec["env"]}
+        if spec.get("always_load"):
+            j["alwaysLoad"] = True
         r = self.ctx.capture([claude, "mcp", "add-json", "-s", "user", name, json.dumps(j)], timeout=30)
         return r.returncode == 0, (r.stderr or r.stdout).strip()
 
