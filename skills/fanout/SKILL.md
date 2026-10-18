@@ -18,6 +18,7 @@ fanout --example              # a job file to copy
 ## Writing a job (JSON, details in `fanout --help`)
 
 - **tasks**: one per output, each with a `prompt` and the exact `files` it may write. Tasks must not share files.
+- **edit**: `true` on a task that changes files that already exist (a fix): without it, a task runs only when one of its files is missing.
 - **rules**: conventions every worker must follow (names, imports, "touch only your files"). Give the worker a sample file to copy
   in the rules or the prompt ("follow cos/Screens/InboxScreen.swift") instead of describing a style.
 - **verify**: the one command that proves it works (`xcodebuild …`, `pytest -q`, `ruff check`). With an `error_regex`

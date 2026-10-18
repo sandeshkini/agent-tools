@@ -16,6 +16,7 @@ Job file (JSON). Paths in "files" are relative to "workdir".
   parallel  workers at once (default 6; the free tier drops requests silently when flooded)
   rules     text put in front of every task prompt (conventions, what not to touch)
   tasks     [{"id": "...", "prompt": "...", "files": ["path it may write", ...]}]
+            "edit": true = the task changes files that already exist (pending until git sees them change)
   verify    {"cmd": "...", "cwd": ".", "max_rounds": 4, "error_regex": "(file):(line):..: error: (msg)"}
             error_regex groups: 1 = file path, 2 = line, 3 = message. Errors in a task's file go back to that task's
             worker; anything else goes to one worker that may edit all task files.
@@ -93,6 +94,10 @@ class Run:
                 rc, out = sh(["git", "worktree", "add", str(self.tree), "fanout/" + self.name], self.repo)
             if rc:
                 sys.exit("could not make the worktree: " + out.strip())
+        # where this branch left the repo's current branch: "edit" tasks count as done once their files differ from it
+        rc, src = sh(["git", "rev-parse", "HEAD"], self.repo)
+        rc, mb = sh(["git", "merge-base", "HEAD", src.strip()], str(self.tree))
+        self.base_sha = mb.strip() or "HEAD"
         self.out.mkdir(parents=True, exist_ok=True)
 
     # -- one worker
@@ -114,7 +119,12 @@ class Run:
                 "Reply with one line when done." % (self.rules, files, task["prompt"]))
 
     def missing(self, task):
-        return [f for f in task["files"] if not (self.work / f).exists()]
+        gone = [f for f in task["files"] if not (self.work / f).exists()]
+        if gone or not task.get("edit"):
+            return gone
+        # an "edit" task changes files that already exist: it is pending until git sees a change in them
+        r = subprocess.run(["git", "diff", "--quiet", getattr(self, "base_sha", "HEAD"), "--"] + task["files"], cwd=self.work)
+        return [] if r.returncode else list(task["files"])
 
     # -- stage 1: write
     def write_all(self):
@@ -166,9 +176,9 @@ class Run:
                      "Do not run builds, tests or git. Relevant output:\n%s\n\nReply with one line when done."
                      % (v["cmd"], ", ".join(task["files"]), "\n".join(errs[:15])))
                 self.worker(p, tag)
-                key = task["id"] if task["id"] in self.log["tasks"] else None
-                if key:
-                    self.log["tasks"][key]["fix_rounds"] += 1
+                if task["id"] != "_all":
+                    e = self.log["tasks"].setdefault(task["id"], {"attempts": 0, "seconds": 0.0, "fix_rounds": 0})
+                    e["fix_rounds"] += 1
                 else:
                     self.log["catch_all_fixes"] = self.log.get("catch_all_fixes", 0) + 1
             with cf.ThreadPoolExecutor(max(1, self.parallel)) as ex:
