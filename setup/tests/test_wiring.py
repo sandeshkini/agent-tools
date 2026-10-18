@@ -45,6 +45,19 @@ class WiringPlan(unittest.TestCase):
         self.assertIn("claude-code: update MCP server agent-tools", p.actions)
         self.assertIn("claude-code: link skill memory", p.actions)
 
+    def test_always_load_is_wired_for_claude_code_only(self):
+        want = dict(HTTP, programs=None, always_load=True)
+        f = facts({"agent-tools": dict(HTTP, always_load=False)}, {"memory": "/r/memory/skill"})
+        f["want_mcp"] = {"agent-tools": want}
+        p = wiring().plan(f)
+        self.assertEqual(p.status, CHANGE)                      # Claude Code's entry lacks alwaysLoad
+        f = facts({"agent-tools": dict(HTTP, always_load=True)}, {"memory": "/r/memory/skill"})
+        f["want_mcp"] = {"agent-tools": want}
+        self.assertEqual(wiring().plan(f).status, OK)
+        f = facts({"agent-tools": dict(HTTP)}, {"memory": "/r/memory/skill"})   # a program that doesn't report it
+        f["want_mcp"] = {"agent-tools": want}
+        self.assertEqual(wiring().plan(f).status, OK)
+
     def test_unknown_servers_reported_not_removed(self):
         p = wiring().plan(facts({"agent-tools": dict(HTTP), "hand-added": dict(HTTP)}, {"memory": "/r/memory/skill"}))
         self.assertEqual(p.status, OK)

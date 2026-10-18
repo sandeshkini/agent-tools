@@ -21,12 +21,58 @@ A blank screenshot means the app crashed. Check `document.getElementById("root")
 Theme: sets localStorage "lifeos-theme" (LifeOS's key) before loading. Harmless elsewhere.
 Output: prints one PNG path per shot, e.g. /tmp/ui-shot/habits-desktop-light.png.
 Then read the PNGs (they're images) and judge them against design/DESIGN.md.
+
+Images are shrunk to at most MAX_WIDTH (900) px wide before you read them: an image costs tokens by its pixel
+count and stays in the chat for every later turn (a 1440 px desktop shot is ~1.7k tokens, 900 px ~0.7k). Narrower
+shots (the phone) are left as they are. A shot whose pixels equal the file already at that path prints
+"(unchanged)": don't read it again. --full keeps the full-size capture.
 """
-import argparse, glob, http.server, json, os, re, subprocess, sys, threading, time, urllib.request
+import argparse, glob, hashlib, http.server, json, os, re, subprocess, sys, threading, time, urllib.request
 
 SIZES = {"desktop": (1440, 900), "phone": (440, 956), "tablet": (834, 1112), "wide": (1920, 1080)}
 AB = "agent-browser"
 PROXY_PORT = 4019
+MAX_WIDTH = 900
+
+
+def image_width(path):
+    with open(path, "rb") as f:
+        head = f.read(24)
+    return int.from_bytes(head[16:20], "big") if head[:8] == b"\x89PNG\r\n\x1a\n" else 0
+
+
+def shrink(path, width=MAX_WIDTH):
+    """Downscale a PNG in place to `width` px wide if it's wider (never enlarges). sips on macOS, Pillow or
+    ImageMagick elsewhere; with none of them the file is left as captured."""
+    if image_width(path) <= width:
+        return
+    try:
+        if sys.platform == "darwin":
+            subprocess.run(["sips", "--resampleWidth", str(width), path], capture_output=True, timeout=30, check=True)
+            return
+    except (OSError, subprocess.SubprocessError):
+        pass
+    try:
+        from PIL import Image
+        im = Image.open(path)
+        im.resize((width, round(im.height * width / im.width)), Image.LANCZOS).save(path)
+        return
+    except ImportError:
+        pass
+    for exe in (["magick"], ["convert"]):
+        try:
+            subprocess.run([*exe, path, "-resize", f"{width}x", path], capture_output=True, timeout=30, check=True)
+            return
+        except (OSError, subprocess.SubprocessError):
+            continue
+
+
+def digest(path):
+    try:
+        with open(path, "rb") as f:
+            return hashlib.md5(f.read()).hexdigest()
+    except OSError:
+        return ""
 
 
 def ab(*args, timeout=60):
@@ -93,6 +139,7 @@ def main():
                          "Repeat for several clicks in order; end with * to match the start of the text (\"IBKR TFSA*\")")
     ap.add_argument("--wait", type=float, default=3.5, help="seconds to let the page settle")
     ap.add_argument("--out", default="/tmp/ui-shot")
+    ap.add_argument("--full", action="store_true", help="keep the capture at full size (default: at most %d px wide)" % MAX_WIDTH)
     a = ap.parse_args()
 
     srv = None
@@ -123,8 +170,11 @@ def main():
                                "if(b.length)b[0].click()})()" % c)
                     time.sleep(a.wait)
                 out = os.path.join(a.out, f"{name}-{size}-{theme}.png")
+                before = digest(out)
                 ab("screenshot", out)
-                print(out)
+                if not a.full:
+                    shrink(out)
+                print(out + (" (unchanged)" if before and before == digest(out) else ""))
     finally:
         ab("set", "viewport", "1440", "900")
         ab("tab", "close")

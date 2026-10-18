@@ -18,6 +18,9 @@ ui-shot <url> [--sizes desktop,phone,tablet,wide] [--themes light,dark] [--click
 - `--click "Markets"` clicks a visible button or tab after load, for sub-tabs.
 - It prints PNG paths (`/tmp/ui-shot/<name>-<size>-<theme>.png`). **Open them with Read and
   actually look.**
+- Shots are shrunk to at most 900 px wide (the phone is already narrower), so each costs ~0.7k tokens instead of
+  ~1.7k, and it stays in the chat for every later turn. `--full` keeps full size; only use it to inspect a
+  detail. A path printed with `(unchanged)` is pixel-identical to the file there before: don't read it again.
 - It opens its own tab and closes it, so it never navigates a working tab away. It adds a
   cache-buster so you don't see a stale bundle.
 
@@ -25,7 +28,7 @@ ui-shot <url> [--sizes desktop,phone,tablet,wide] [--themes light,dark] [--click
 
 1. Change the code, then **test it before it goes live**: for a mini app, `cos app preview <folder>` (cos-app-builder skill).
 2. `ui-shot <url> --sizes desktop,phone --themes light,dark` for **every** page, not just the one you changed. A **blank** screenshot means the whole app crashed. Only then install.
-3. Read every image. Check against `apps/lifeos/design/DESIGN.md` (kept for the mini apps):
+3. Read every image once (not again after a change that can't show up in it). Check against `apps/lifeos/design/DESIGN.md` (kept for the mini apps):
    - nothing overflows the phone width (see the §13 flex `min-width: 0` gotcha)
    - headings are Cabinet Grotesk, body is Satoshi
    - no all-caps labels, no filler text
