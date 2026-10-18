@@ -19,6 +19,7 @@ git is fine as a subprocess.run() from here -- that's how the previous
 """
 import runpy
 import subprocess
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -34,6 +35,22 @@ def ts():
 
 def run(cmd, **kw):
     return subprocess.run(cmd, cwd=REPO, capture_output=True, text=True, **kw)
+
+
+def run_retry(cmd, tries=6, delay=5):
+    """run(), but if git fails on a held .git/index.lock (Repo Sync is committing too), wait and retry.
+    Never deletes the lock: it belongs to whoever holds it."""
+    for i in range(tries):
+        r = run(cmd)
+        if r.returncode == 0 or "index.lock" not in (r.stderr or ""):
+            return r
+        if i < tries - 1:
+            time.sleep(delay)
+    return r
+
+
+def err(r):
+    return ((r.stderr or "").strip() or (r.stdout or "").strip() or f"exit {r.returncode}, no output")
 
 
 def main():
@@ -54,10 +71,13 @@ def main():
         print(f"{ts()}  git: nothing changed", flush=True)
         return
 
-    run(["git", "add", "-A"])
-    commit = run(["git", "commit", "-q", "-m", f"sync: {datetime.now().strftime('%Y-%m-%d %H:%M')} from aibo-mac"])
+    add = run_retry(["git", "add", "-A"])
+    if add.returncode != 0:
+        print(f"{ts()}  git add failed: {err(add)}", flush=True)
+        return
+    commit = run_retry(["git", "commit", "-q", "-m", f"sync: {datetime.now().strftime('%Y-%m-%d %H:%M')} from aibo-mac"])
     if commit.returncode != 0:
-        print(f"{ts()}  git commit failed: {commit.stderr.strip()}", flush=True)
+        print(f"{ts()}  git commit failed: {err(commit)}", flush=True)
         return
     push = run(["git", "push", "-q", "origin", "main"])
     if push.returncode != 0:
