@@ -343,14 +343,14 @@ def main():
     before = {cid: c["status"] for cid, c in claims.items()}
     fixes = fold_fixes(claims)
     notes = note_candidates(claims, pages)
-    before = set(claims)
+    known = set(claims)   # the leak check looks only at facts made tonight
     cands = R.extract(NIGHT, pages, claims, text) if text.strip() else []
     cands = R.route(NIGHT, cands, pages, claims) if cands else []
     cands += notes
     log(f"{len(cands)} candidates ({len(notes)} notes, {fixes} fixes filed) on {len({c['page'] for c in cands})} pages")
     stats = R.apply(NIGHT, cands, pages, claims) if cands else {}
     # last check: nothing that looks like a secret or a scrubbed number goes into the store
-    for cid in set(claims) - before:
+    for cid in set(claims) - known:
         bad = leaks(claims[cid]["text"]) or re.search(r"\[(secret[^\]]*|number|ip|email)\]", claims[cid]["text"])
         if bad:
             log(f"dropped {cid}: looks like it holds a secret ({bad})")
