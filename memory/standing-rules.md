@@ -1,8 +1,8 @@
 # Sandesh's standing rules (every agent, both machines)
 
 A short, checked list of rules that hold until he changes them. It's loaded into every agent's instructions
-(registry.toml `[instructions.standing-rules]`). The `memory` MCP has the details and the history; this list is the part
-that must never be missed by a search. Change a line only when Sandesh says so directly, and tell him in your reply.
+(registry.toml `[instructions.standing-rules]`). cos Knowledge (the `knowledge` skill) has the details and the
+history; this list is the part that must never be missed by a search. Change a line only when Sandesh says so directly, and tell him in your reply.
 
 **Working with him**
 - Do machine chores yourself (licence prompts, dialogs, desktop clicks); don't ask him for them. (2026-10-10)
@@ -38,6 +38,9 @@ that must never be missed by a search. Change a line only when Sandesh says so d
 - Nextcloud and other family-facing apps: family keep logging in exactly as today, no 2FA for them. Any change to DNS,
   Pangolin/SSO or how family reach an app needs an exact description of what they'd see and his OK first. (2026-10-08)
 
-**Memory**
-- Record only his rules, preferences, decisions (with the reason) and non-obvious setup; not progress or "pending". The
-  agent that heard it from him records it; passed-on decisions aren't recorded again. See the `memory` skill.
+**Knowledge**
+- cos Knowledge is the one knowledge store; Graphiti is retired. Before asking him or assuming, `knowledge_search`
+  (and `knowledge_read` the page for a system before working on it). (2026-10-17)
+- Note only his rules, preferences, decisions (with the reason) and non-obvious setup, with `knowledge_note`; never
+  progress, "pending", secrets or scratch. The agent that heard it from him notes it; a passed-on decision ends
+  "(saved to Knowledge)" and isn't noted again. See the `knowledge` skill. (2026-10-10, 2026-10-17)
