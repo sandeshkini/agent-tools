@@ -258,6 +258,14 @@ class Run:
                 return True
             if rnd > int(v.get("max_rounds", 4)):
                 return False
+            # the same failures after a fix round: the workers are stuck (often two locked tests that disagree, or an
+            # error outside every task's files). Stop and leave it to the orchestrator instead of paying for more rounds.
+            sig = sorted(set(re.sub(r"\(\d+(\.\d+)? seconds\)", "", l).strip() for l in out.splitlines()
+                             if "error" in l or "failed" in l))
+            if sig and sig == getattr(self, "_last_sig", None):
+                self.log["stalled"] = rnd
+                return False
+            self._last_sig = sig
             owned, other = {}, []
             frx = re.compile(r"^(\S+):(\d+): error: (forbidden .*)$", re.M)
             matches = list(rx.finditer(out)) if rx else []
@@ -342,6 +350,9 @@ class Run:
         for t in self.tasks:
             e = self.log["tasks"].get(t["id"], {})
             lines.append("| %s | %s | %s | %s |" % (t["id"], e.get("attempts", 0), e.get("seconds", 0), e.get("fix_rounds", 0)))
+        if self.log.get("stalled"):
+            lines += ["", "Stopped at verify run %d: the same failures as the run before, after a fix round. Look at them "
+                      "yourself (two locked tests that disagree, or an error outside every task's files)." % self.log["stalled"]]
         if self.log.get("catch_all_fixes"):
             lines += ["", "Catch-all fix rounds (errors not tied to one task): %d" % self.log["catch_all_fixes"]]
         if self.log.get("locked_touched"):
