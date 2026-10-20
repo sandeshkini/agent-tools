@@ -13,6 +13,7 @@ Job file (JSON). Paths in "files" are relative to "workdir".
   base      branch or commit to start from (default HEAD)
   workdir   subfolder of the worktree the workers run in (default ".")
   model     opencode model id (default opencode/deepseek-v4.1-flash-free)
+  max_usd   abort the run if OpenRouter billing for it passes this (live progress: <run>/status.json)
   provider  openrouter/ models only: OpenRouter routing (default {"sort": "price"}, cheapest host first)
   small_model  model for opencode's title calls (default: the job's model; OpenRouter's default is Nano Banana)
   parallel  workers at once (default 6; the free tier drops requests silently when flooded)
@@ -203,7 +204,28 @@ class Run:
         except subprocess.TimeoutExpired:
             rc, out = "timeout", ""
         (self.out / "workers.log").open("a").write("--- %s rc=%s %.0fs\n%s\n" % (tag, rc, time.time() - t, out[-700:]))
+        self.status(tag, rc)
         return rc, time.time() - t
+
+    def status(self, last, rc=None):
+        """Live one-line progress for the orchestrator: <run>/status.json (tokens, list-price estimate, billed delta).
+        Cheap to read. Aborts the run (exit 3) if job.max_usd is set and the billed delta passes it."""
+        try:
+            tok = opencode_tokens(self.work) or {}
+            st = {"updated": time.strftime("%H:%M:%S"), "last": last, "rc": rc, "tokens": tok,
+                  "tasks_done": sum(1 for t in self.tasks if not self.missing(t)), "tasks_total": len(self.tasks),
+                  "verify_rounds": len(self.log["rounds"])}
+            if getattr(self, "billed0", None) is not None:
+                b = billed_usage()
+                if b is not None:
+                    st["billed_usd"] = round(b - self.billed0, 4)
+            (self.out / "status.json").write_text(json.dumps(st))
+            cap = self.job.get("max_usd")
+            if cap and st.get("billed_usd", 0) > float(cap):
+                (self.out / "status.json").write_text(json.dumps(dict(st, aborted="max_usd %s exceeded" % cap)))
+                os._exit(3)
+        except Exception:
+            pass
 
     def locked_note(self):
         g = self.job.get("locked")
