@@ -17,7 +17,12 @@ A page has a stable **id**, which never changes or gets reused; its title can ch
 | `machine/<slug>` | A computer or device (aibo-mac, aibo-linux, phone). | shared |
 | `~<person>/<slug>` | Private to that person: money, family, health, personal admin. | only that person |
 
-Put money, family members, health and personal admin on `~sandesh/…` pages, never on shared pages.
+Put money, family members, health and personal admin on `~sandesh/…` pages, never on shared pages. That covers
+accounts, balances, amounts, income, mortgage, investments and what a routine does with them. A shared page that needs
+to mention one of these says only that it exists and links to the private page (`[[~sandesh/money-saving-investing|Saving
+and investing]]`); it never repeats the detail or cites the claim. A claim that mixes a mechanic (how a routine signs
+in) with money detail goes on the private page. When an existing claim on a shared page holds such a detail, re-file it
+onto the private page.
 
 Every page has the same sections:
 
