@@ -1,0 +1,17 @@
+# machine-health config (KEY=VALUE). Environment variables override these. See README.md.
+# --- notifications (else borrowed from the installed mcp-tools LaunchAgent, as before)
+# NTFY_URL=  NTFY_TOPIC=  NTFY_TOKEN=
+# --- stuck-watch
+# STUCK_WATCH_AGENTS=claude,opencode,codex,cptr
+# STUCK_WATCH_MINUTES=3            # file operations idle this long = stuck
+# STUCK_WATCH_OTHER_MINUTES=15     # any other agent command
+# STUCK_WATCH_PROMPT_MINUTES=2     # TCC prompt / on-screen dialog unanswered this long
+# STUCK_WATCH_REALERT_MINUTES=30
+# STUCK_WATCH_HOST=my-mac
+# --- mem-reaper
+# MEM_REAPER_SWAP_GB=20            # swap above this = clean at once + one push
+# MEM_REAPER_TAB_AGE_S=10800       # Agent Chrome tab unchanged this long = closed
+# MEM_REAPER_RENDERER_GB=3
+# MEM_REAPER_DAEMON_IDLE_S=7200
+# --- stale-prompts
+# MACHINE_HEALTH_STALE_PROMPT_S=3600

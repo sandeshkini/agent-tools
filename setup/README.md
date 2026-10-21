@@ -20,7 +20,7 @@ should say "in place" for everything, or list the real gaps.
 | `computer-use` | cua-driver + daemon, agent-browser, optional Agent Chrome (no MCP or skill wiring: that's `wiring`) | not applicable (Linux uses computer-use-linux, wired from the registry) | `computer-use/install.sh` |
 | `mcp-tools` | LaunchAgent on 127.0.0.1:8009 | the Docker service (`mode = "docker"`): checked only | `mcp-tools/install.sh` |
 | `wiring` | writes `registry.toml` (MCP servers, skills, `bin/` commands) into Claude Code, OpenCode, Antigravity (agy), `~/.agents/skills` and `~/.local/bin` | same | setup itself (`agentsetup/components/wiring.py`) |
-| `stuck-watch` | LaunchAgent | not applicable | `stuck-watch/install.sh` |
+| `stuck-watch` | LaunchAgent | not applicable | `machine-health/install.sh` |
 | `cptr-watchdog` | LaunchAgent, pointed at the profile's cptr label/port | systemd `--user` timer; another port goes in a drop-in | `cptr-watchdog/install.sh` |
 | `sync-ai-sessions` | LaunchAgent (needs the ai-memory repo and `uv`) | timer: checked; set up by the profile's `installer` if given | `sync-ai-sessions/install.sh` |
 | `cptr` | report only: registered and answering, which version | same, for the systemd unit | nothing: setup never installs or restarts cptr |

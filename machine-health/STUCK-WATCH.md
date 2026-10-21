@@ -1,3 +1,5 @@
+> Part of machine-health (see README.md). Config is now `~/.config/machine-health/config` (the old `~/.config/stuck-watch/config` is still read), the log is `~/Library/Logs/machine-health.log`, and `machine-health install` installs the job; the install/venv notes below are historical.
+
 # stuck-watch: notice when an agent is silently stuck on macOS
 
 AI agents (Claude Code, OpenCode, Codex, cptr) run their commands from background processes

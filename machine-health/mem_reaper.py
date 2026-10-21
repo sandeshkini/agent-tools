@@ -1,23 +1,25 @@
 #!/usr/bin/env python3
-"""mem-reaper: keep aibo-mac from running out of memory because of abandoned agent-browser daemons and
-Agent Chrome tabs. Runs every 2 min from launchd; does the full clean-up every 30 min, or at once when
-swap > 20 GB or memory pressure is critical (and then sends one ntfy push with the top 5 processes).
-
-  reaper.py            normal launchd tick
-  reaper.py --force    full clean-up now
-  reaper.py --dry-run  log what it would do, change nothing
-Thresholds can be overridden with MEM_REAPER_* env vars (used by the tests), see CFG below.
+"""mem-reaper (a machine-health check): keep aibo-mac from running out of memory because of abandoned
+agent-browser daemons and Agent Chrome tabs/renderers. run() is called every 2 min by machine-health; it does the
+full clean-up every 30 min, or at once when swap > 20 GB or memory pressure is critical (and then sends one ntfy
+push with the top 5 processes). Thresholds: MEM_REAPER_* env vars or the machine-health config file.
 """
-import base64, json, os, plistlib, re, signal, subprocess, sys, time, urllib.request
+import json, os, re, signal, subprocess, sys, time, urllib.request
 from datetime import datetime
 
 HOME = os.path.expanduser("~")
 AB_DIR = os.path.join(HOME, ".agent-browser")
-STATE = os.path.join(HOME, ".local", "state", "mem-reaper", "state.json")
-LOG = os.path.join(HOME, "Library", "Logs", "mem-reaper.log")
-DRY = "--dry-run" in sys.argv
-FORCE = "--force" in sys.argv
-e = os.environ.get
+STATE = os.path.join(HOME, ".local", "state", "machine-health", "mem-reaper.json")
+LOG = os.path.join(HOME, "Library", "Logs", "machine-health.log")
+DRY = False        # set by run(dry=True)
+
+
+def e(k, d=None):
+    import stuck_watch      # shares the machine-health config file with stuck-watch
+    return os.environ.get(k) or stuck_watch.CFG.get(k) or d
+
+
+
 CFG = {
     "cdp": e("MEM_REAPER_CDP", "http://127.0.0.1:9333"),
     "chrome_dir": e("MEM_REAPER_CHROME_DIR", "Chrome-Agent"),
@@ -34,7 +36,7 @@ KEEP_TAB = re.compile(r"login|log-in|signin|sign-in|signon|sign_in|/auth|oauth|s
 
 
 def log(msg):
-    line = f"{datetime.now().isoformat(timespec='seconds')} {'[dry] ' if DRY else ''}{msg}"
+    line = f"{datetime.now().isoformat(timespec='seconds')} MEM {'[dry] ' if DRY else ''}{msg}"
     print(line, flush=True)
     try:
         os.makedirs(os.path.dirname(LOG), exist_ok=True)
@@ -218,21 +220,8 @@ def reap_renderers():
 
 # ------------------------------------------------------------------ alert
 def ntfy_config():
-    for name in ("com.sandesh.mcp-tools.plist", "com.sandesh.pa.agent-tools-mcp.plist"):
-        try:
-            env = plistlib.load(open(os.path.join(HOME, "Library", "LaunchAgents", name), "rb")).get("EnvironmentVariables", {})
-        except Exception:
-            continue
-        if env.get("NTFY_URL"):
-            tok = env.get("NTFY_TOKEN")
-            if not tok:
-                out = sh("/usr/bin/security", "find-generic-password", "-s", "personal-agent", "-a", "NTFY_TOKEN", "-w")
-                try:
-                    tok = base64.b64decode(out.strip()).decode() if out.strip() else None
-                except Exception:
-                    tok = None
-            return env["NTFY_URL"], env.get("NTFY_TOPIC") or "aibo", tok
-    return None, None, None
+    import stuck_watch
+    return stuck_watch.ntfy_config()
 
 
 def top5():
@@ -259,30 +248,35 @@ def alert(swap, level, acted):
         log(f"ntfy failed: {ex}")
 
 
-def main():
-    if sys.platform != "darwin":
-        sys.exit("macOS only")
+def run(force=False, dry=False):
+    """One tick. Returns a one-line summary for `machine-health status`."""
+    global DRY
+    DRY = dry
     st, now = load_state(), time.time()
     swap, level = swap_used_gb(), pressure_level()
     hot = swap > CFG["swap_alert_gb"] or level >= 4
     due = now - st.get("last_run", 0) >= CFG["interval_s"]
     # tabs are tracked every tick so their age clock is accurate; closing/killing only on a full run
-    if not (FORCE or hot or due):
+    if not (force or hot or due):
         reap_tabs(st, close=False)
-        save_state(st)
-        return
+        if not dry:
+            save_state(st)
+        return f"swap {swap:.1f} GB, pressure {level}; watching"
     d = reap_daemons()
     t = reap_tabs(st)
     r = reap_renderers()
-    st["last_run"] = now
-    save_state(st)
     acted = f"{d} daemons, {t} tabs, {r} renderers"
-    log(f"run ({'swap/pressure' if hot else 'timer'}): swap {swap:.1f} GB, pressure {level}; {acted}")
-    if hot and (now - st.get("last_alert", 0) > CFG["alert_every_s"]):
-        st["last_alert"] = now
+    log(f"run ({'swap/pressure' if hot else 'timer' if due else 'forced'}): swap {swap:.1f} GB, pressure {level}; {acted}")
+    if not dry:
+        st["last_run"] = now
         save_state(st)
+    if hot and (now - st.get("last_alert", 0) > CFG["alert_every_s"]):
+        if not dry:
+            st["last_alert"] = now
+            save_state(st)
         alert(swap, level, acted)
+    return f"swap {swap:.1f} GB, pressure {level}; reaped {acted}"
 
 
 if __name__ == "__main__":
-    main()
+    print(run(force="--force" in sys.argv, dry="--dry-run" in sys.argv))

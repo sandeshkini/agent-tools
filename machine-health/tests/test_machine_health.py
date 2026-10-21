@@ -1,0 +1,77 @@
+import json, os, sys, unittest
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+import docker_hygiene as dh
+import mem_reaper as mr
+import stale_prompts as sp
+
+
+def ev(msg, ts, pid=100):
+    return json.dumps({"eventMessage": msg, "timestamp": ts, "processID": pid})
+
+
+class StalePrompts(unittest.TestCase):
+    def lines(self, granted):
+        L = [ev("AUTHREQ_CTX: msgID=1.1, service=kTCCServiceScreenCapture, preflight=no", "2026-10-21 10:04:00.000000+0000"),
+             ev("AUTHREQ_ATTRIBUTION: msgID=1.1, accessing={TCCDProcess: identifier=com.cos.node, pid=5}, responsible={TCCDProcess: identifier=com.cos.node, pid=5}", "2026-10-21 10:04:00.100000+0000"),
+             ev("AUTHREQ_PROMPTING: msgID=1.1, service=kTCCServiceScreenCapture, Resp:{TCCDProcess: identifier=com.cos.node, pid=5}", "2026-10-21 10:04:01.000000+0000")]
+        if granted:
+            L += [ev("AUTHREQ_CTX: msgID=2.2, service=kTCCServiceScreenCapture, preflight=yes", "2026-10-21 12:00:00.000000+0000"),
+                  ev("AUTHREQ_ATTRIBUTION: msgID=2.2, accessing={TCCDProcess: identifier=com.cos.node, pid=9}", "2026-10-21 12:00:00.100000+0000"),
+                  ev("AUTHREQ_RESULT: msgID=2.2, authValue=2, authReason=4", "2026-10-21 12:00:01.000000+0000")]
+        return L
+
+    def test_stale_when_granted_after_prompt(self):
+        prompts, grants = sp.parse_events(self.lines(True))
+        started = prompts[0]["t"] + 2
+        self.assertEqual(sp.decide(started, prompts, grants)[0], "stale")
+
+    def test_kept_when_no_grant_seen(self):
+        prompts, grants = sp.parse_events(self.lines(False))
+        self.assertEqual(sp.decide(prompts[0]["t"], prompts, grants)[0], "unknown")
+
+    def test_unknown_when_no_matching_prompt(self):
+        prompts, grants = sp.parse_events(self.lines(True))
+        self.assertEqual(sp.decide(prompts[0]["t"] + 99999, prompts, grants)[0], "unknown")
+
+    def test_etime(self):
+        self.assertEqual(sp.etime_s("07:01:02"), 25262)
+        self.assertEqual(sp.etime_s("1-00:00:05"), 86405)
+
+
+class DockerHygiene(unittest.TestCase):
+    def img(self, repo, tag, id, created, size=1e8):
+        return {"repo": repo, "tag": tag, "id": id, "size": size, "created": created}
+
+    def test_never_lists_rollback_or_recent_hub(self):
+        imgs = [self.img("lifeos-rollback", "pre-x", "a", "1"), self.img("lifeos-web-rollback", "pre-y", "b", "1"),
+                self.img("cos-hub", "latest", "h5", "5"), self.img("cos-hub", "previous", "h4", "4"),
+                self.img("cos-hub", "h3", "h3", "3"), self.img("cos-hub", "h2", "h2", "2"),
+                self.img("cos-hub", "h1", "h1", "1"), self.img("cos-hub", "rollback-1011", "r", "0"),
+                self.img("cosreltest9-hub", "x", "t", "1"), self.img("lifeos-web", "final", "w", "1"),
+                self.img("lifeos-web", "latest", "w", "1"), self.img("<none>", "<none>", "d", "1")]
+        c = dh.classify(imgs)
+        flat = {(i["repo"], i["tag"]) for v in c.values() for i in v}
+        self.assertFalse(any("rollback" in r + t for r, t in flat))
+        self.assertNotIn(("cos-hub", "latest"), flat)
+        self.assertIn(("cosreltest9-hub", "x"), flat)
+        self.assertIn(("lifeos-web", "final"), flat)
+        self.assertNotIn(("lifeos-web", "latest"), flat)
+        self.assertEqual({i["tag"] for i in c["cos-hub beyond newest 3"]}, {"h1", "h2"})
+        self.assertEqual(len(c["dangling"]), 1)
+
+    def test_module_never_deletes(self):
+        self.assertNotRegex(open(dh.__file__).read(), r"\"(rmi|rm|prune|image)\"")
+
+
+class MemReaper(unittest.TestCase):
+    def test_keep_tab_pattern(self):
+        for u in ("https://x.com/login", "https://accounts.google.com/x", "about:blank", "https://a.b/sso/start"):
+            self.assertTrue(mr.KEEP_TAB.search(u), u)
+        self.assertFalse(mr.KEEP_TAB.search("http://127.0.0.1:4000/viewer"))
+
+    def test_etime(self):
+        self.assertEqual(mr.etime_s("10-18:42:28"), 10 * 86400 + 18 * 3600 + 42 * 60 + 28)
+
+
+if __name__ == "__main__":
+    unittest.main()

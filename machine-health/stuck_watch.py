@@ -42,20 +42,22 @@ import urllib.request
 from datetime import datetime
 
 HOME = os.path.expanduser("~")
-CONFIG_FILE = os.path.join(HOME, ".config", "stuck-watch", "config")
+CONFIG_FILES = [os.path.join(HOME, ".config", "stuck-watch", "config"),      # legacy, read first
+                os.path.join(HOME, ".config", "machine-health", "config")]
 
 
 # ------------------------------------------------------------------------------------ config
 def load_config():
     cfg = {}
-    try:
-        for line in open(CONFIG_FILE):
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                k, v = line.split("=", 1)
-                cfg[k.strip()] = v.strip().strip('"').strip("'")
-    except OSError:
-        pass
+    for path in CONFIG_FILES:
+        try:
+            for line in open(path):
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    cfg[k.strip()] = v.strip().strip('"').strip("'")
+        except OSError:
+            pass
     cfg.update({k: v for k, v in os.environ.items() if k.startswith(("STUCK_WATCH_", "NTFY_"))})
     return cfg
 
@@ -77,8 +79,8 @@ PROMPT_MIN = conf("STUCK_WATCH_PROMPT_MINUTES", 2.0)   # TCC prompts + on-screen
 REALERT_MIN = conf("STUCK_WATCH_REALERT_MINUTES", 30.0)
 INTERVAL = conf("STUCK_WATCH_INTERVAL", 60.0)
 CPU_EPS = conf("STUCK_WATCH_CPU_EPSILON", 0.05)        # seconds of CPU that still count as "idle"
-LOG_FILE = os.path.expanduser(conf("STUCK_WATCH_LOG", "~/Library/Logs/stuck-watch.log"))
-STATE_FILE = os.path.expanduser(conf("STUCK_WATCH_STATE", "~/.local/state/stuck-watch/state.json"))
+LOG_FILE = os.path.expanduser(conf("STUCK_WATCH_LOG", "~/Library/Logs/machine-health.log"))
+STATE_FILE = os.path.expanduser(conf("STUCK_WATCH_STATE", "~/.local/state/machine-health/stuck-watch.json"))
 TITLE = conf("STUCK_WATCH_TITLE", "Stuck Watch")
 TCC_ENABLED = conf("STUCK_WATCH_TCC", "1") != "0"
 WINDOWS_ENABLED = conf("STUCK_WATCH_WINDOWS", "1") != "0"
@@ -734,42 +736,54 @@ class Windows:
 
 
 # ------------------------------------------------------------------------------------- main
-def main():
-    once = "--once" in sys.argv
-    log("START", f"host={HOST} agents={','.join(AGENTS)} file={FILE_MIN}m other={OTHER_MIN}m "
-                 f"prompt={PROMPT_MIN}m realert={REALERT_MIN}m interval={INTERVAL}s "
-                 f"ntfy={'yes' if ntfy_config()[0] else 'no'}{' DRY-RUN' if DRY_RUN else ''}")
-    alerts = Alerts()
-    stuck = StuckCommands()
-    tcc = TCCWatch() if TCC_ENABLED else None
-    if tcc:
-        if once:
-            tcc._seed()
-        else:
-            tcc.start()
-    try:
-        wins = Windows() if WINDOWS_ENABLED else None
-    except OSError as e:
-        log("WARN", f"window list unavailable: {e}")
-        wins = None
-    while True:
+class StuckWatch:
+    """The whole check as an object, so machine-health can call tick() on its own schedule."""
+
+    def __init__(self, once=False):
+        log("START", f"stuck-watch host={HOST} agents={','.join(AGENTS)} file={FILE_MIN}m other={OTHER_MIN}m "
+                     f"prompt={PROMPT_MIN}m realert={REALERT_MIN}m interval={INTERVAL}s "
+                     f"ntfy={'yes' if ntfy_config()[0] else 'no'}{' DRY-RUN' if DRY_RUN else ''}")
+        self.alerts = Alerts()
+        self.stuck = StuckCommands()
+        self.tcc = TCCWatch() if TCC_ENABLED else None
+        if self.tcc:
+            if once:
+                self.tcc._seed()
+            else:
+                self.tcc.start()
+        try:
+            self.wins = Windows() if WINDOWS_ENABLED else None
+        except OSError as e:
+            log("WARN", f"window list unavailable: {e}")
+            self.wins = None
+
+    def tick(self):
+        """One pass. Returns the list of (key, message) issues seen now."""
         issues = []
         try:
             procs = snapshot()
-            tcc_issues, pending = tcc.check(procs) if tcc else ([], {})
-            cmd_issues = stuck.scan(procs, pending)
-            issues = cmd_issues + tcc_issues + (wins.check() if wins else [])
+            tcc_issues, pending = self.tcc.check(procs) if self.tcc else ([], {})
+            cmd_issues = self.stuck.scan(procs, pending)
+            issues = cmd_issues + tcc_issues + (self.wins.check() if self.wins else [])
         except Exception as e:
             log("ERROR", f"scan failed: {e!r}")
         live = set()
         for key, message in issues:
             live.add(key)
-            alerts.fire(key, message)
+            self.alerts.fire(key, message)
         # denials are one-off events; keep their dedupe entry until REALERT_MIN passes
         now = time.time()
-        live |= {k for k, t in alerts.sent.items()
+        live |= {k for k, t in self.alerts.sent.items()
                  if k.startswith("tccdeny:") and now - (t["last"] if isinstance(t, dict) else t) < REALERT_MIN * 60}
-        alerts.forget_except(live)
+        self.alerts.forget_except(live)
+        return issues
+
+
+def main():
+    once = "--once" in sys.argv
+    w = StuckWatch(once)
+    while True:
+        issues = w.tick()
         if once:
             if not issues:
                 print("nothing stuck")

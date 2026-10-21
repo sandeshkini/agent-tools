@@ -18,7 +18,8 @@ def config(ctx):
     sources.append({k: sec[k] for k in ("NTFY_URL", "NTFY_TOPIC", "NTFY_TOKEN") if sec.get(k)})
     prof = ctx.section("ntfy")
     sources.append({"NTFY_URL": prof.get("url"), "NTFY_TOPIC": prof.get("topic")})
-    sources.append(read_env_file(ctx.home / ".config/stuck-watch/config"))
+    sources.append(read_env_file(ctx.home / ".config/stuck-watch/config"))      # legacy
+    sources.append(read_env_file(ctx.home / ".config/machine-health/config"))
     if ctx.os == "darwin":
         import plistlib
         for name in MCP_PLISTS:

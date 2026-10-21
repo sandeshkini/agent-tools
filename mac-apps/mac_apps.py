@@ -515,7 +515,7 @@ def classify(label, inner):
     j = " ".join(inner)
     if "probe" in label:
         return None
-    if "stuck_watch" in j or "stuck-watch" in label:
+    if "stuck_watch" in j or "stuck-watch" in label or "machine_health" in j or "machine-health" in label:   # machine-health replaced stuck-watch
         return "stuck-watch"
     if "sync_ai_sessions" in j or "sync-ai-sessions" in j or label.endswith(("sync-ai-sessions", "ai-session-sync")):
         return "sync-ai-sessions"
@@ -577,14 +577,15 @@ def ntfy_config():
     """Same discovery as Stuck Watch: env, ~/.config/stuck-watch/config, then an installed
     agent-tools mcp-tools LaunchAgent's environment."""
     cfg = {}
-    try:
-        for line in open(HOME / ".config/stuck-watch/config"):
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                k, v = line.split("=", 1)
-                cfg[k.strip()] = v.strip().strip('"').strip("'")
-    except OSError:
-        pass
+    for conf_path in (HOME / ".config/stuck-watch/config", HOME / ".config/machine-health/config"):   # legacy, then current
+        try:
+            for line in open(conf_path):
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    cfg[k.strip()] = v.strip().strip('"').strip("'")
+        except OSError:
+            pass
     cfg.update({k: v for k, v in os.environ.items() if k.startswith("NTFY_")})
     mcp = {}
     for name in ("com.sandesh.mcp-tools.plist", "com.sandesh.pa.agent-tools-mcp.plist"):

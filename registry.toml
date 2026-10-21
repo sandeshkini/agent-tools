@@ -159,6 +159,7 @@ pa-secret = "{agent_tools}/bin/fleet-secret"
 agy-ask = "{agent_tools}/bin/agy-ask"
 ui-shot = "{agent_tools}/bin/ui-shot"
 fanout = "{agent_tools}/bin/fanout"
+machine-health = "{agent_tools}/machine-health/machine_health.py"   # status | run | install: stuck-watch, mem-reaper, stale prompts, docker report
 claude-sneha = "{agent_tools}/bin/claude-account"     # Claude Code on Sneha's plan (cptr profile claude-sneha)
 claude-amara = "{agent_tools}/bin/claude-account"     # ... Amara's (cptr profile claude-amara)
 claude-sandesh = "{agent_tools}/bin/claude-account"   # ... Sandesh's own
