@@ -22,6 +22,17 @@ how-and-why of the machine is in `~/Documents/personal/aibo-server/machines/pers
   open a port on the LAN or the internet to make something reachable; add a Pangolin resource instead
   (`aibo-server/infrastructure/pangolin.md`).
 
+## Show your screen while you drive it (always, unasked)
+
+Before your first click or keystroke on the desktop or in the agent-browser Chrome on `:0` (or with computer-use-linux), call the crew tool
+**`share_screen`** with a short note on what you're doing ("logging in to Hydro One"). Sandesh then sees
+your screen live in your chat and on your update card. Rules:
+- Call `share_screen` again with a new note when the step changes, so the card says what's on screen now.
+- Call **`stop_sharing`** as soon as you're done with the screen, before your final reply.
+- If he presses **Take over**, your reply stops and a message tells you: don't touch the mouse, keyboard or
+  browser again until a second message says he handed the screen back.
+- Not for a headless browser, CLI/API work, or screenshots alone (`ui-shot`, the `ui-check` skill).
+
 ## Which tool
 
 | Need | Use |

@@ -24,6 +24,8 @@ ui-shot <url> [--sizes desktop,phone,tablet,wide] [--themes light,dark] [--click
 - It opens its own tab and closes it, so it never navigates a working tab away. It adds a
   cache-buster so you don't see a stale bundle.
 
+Screenshots alone don't need `share_screen` (that's for driving the screen, see mac-operator).
+
 ## The loop
 
 1. Change the code, then **test it before it goes live**: for a mini app, `cos app preview <folder>` (cos-app-builder skill).
