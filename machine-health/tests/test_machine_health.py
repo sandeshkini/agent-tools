@@ -3,6 +3,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import docker_hygiene as dh
 import mem_reaper as mr
 import idle_simulators as isim
+import disk_usage as du
 import stale_prompts as sp
 
 
@@ -91,6 +92,16 @@ class IdleSimulators(unittest.TestCase):
         sims, active = isim.parse(self.PS.replace("2-05:00:00", "00:30:00"))
         self.assertEqual(isim.decide(sims, active, 7200)[0], "none")
         self.assertEqual(isim.decide({}, [], 7200)[0], "none")
+
+
+class DiskUsage(unittest.TestCase):
+    def test_warn_threshold(self):
+        self.assertTrue(du.decide_warn(9.9, 15))
+        self.assertFalse(du.decide_warn(60, 15))
+
+    def test_free_pct_sane(self):
+        pct, free, total = du.free_pct()
+        self.assertTrue(0 < pct <= 100 and free < total)
 
 
 if __name__ == "__main__":

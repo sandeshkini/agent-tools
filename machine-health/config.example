@@ -17,3 +17,5 @@
 # MACHINE_HEALTH_STALE_PROMPT_S=3600
 # --- idle-simulators
 # MACHINE_HEALTH_SIM_IDLE_S=7200   # booted this long with no build/test = shut down
+# --- disk-usage
+# MACHINE_HEALTH_DISK_WARN_PCT=15   # warn (one ntfy a day) under this % free
