@@ -18,7 +18,7 @@ Checks (see README.md):
 One config file ~/.config/machine-health/config (KEY=VALUE; STUCK_WATCH_*, MEM_REAPER_*, MACHINE_HEALTH_*, NTFY_*),
 one log ~/Library/Logs/machine-health.log, one LaunchAgent.
 """
-import json, os, shutil, subprocess, sys, time
+import json, os, shutil, subprocess, sys, threading, time
 from datetime import datetime
 
 HERE = os.path.dirname(os.path.realpath(__file__))
@@ -63,11 +63,15 @@ def load_status():
         return {}
 
 
+_LOCK = threading.Lock()
+
+
 def save_status(st):
-    os.makedirs(STATE_DIR, exist_ok=True)
-    tmp = STATUS + ".tmp"
-    json.dump(st, open(tmp, "w"), indent=1)
-    os.replace(tmp, STATUS)
+    with _LOCK:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        tmp = STATUS + ".tmp"
+        json.dump(dict(st), open(tmp, "w"), indent=1)
+        os.replace(tmp, STATUS)
 
 
 def log(kind, msg):
@@ -105,14 +109,14 @@ def cmd_run(args):
             print(f"{n}: {run_check(n, s, st, dry=dry, force=True)}")
         return
     log("START", f"machine-health checks: {', '.join(todo)}")
-    due = {n: 0.0 for n in todo}
+    def loop(n, spec):       # one thread per check: a slow start (stuck-watch reads an hour of TCC log) blocks nobody
+        while True:
+            run_check(n, spec, st)
+            time.sleep(spec["interval"])
+    for n, spec in todo.items():
+        threading.Thread(target=loop, args=(n, spec), daemon=True).start()
     while True:
-        now = time.time()
-        for n, s in todo.items():
-            if now >= due[n]:
-                run_check(n, s, st)
-                due[n] = time.time() + s["interval"]
-        time.sleep(5)
+        time.sleep(3600)
 
 
 def ago(sec):
