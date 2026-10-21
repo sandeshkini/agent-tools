@@ -12,6 +12,7 @@ Checks (see README.md):
   stuck-watch     agent commands stuck on a macOS prompt / unanswered dialogs; ntfy alerts      (macOS, every 60 s)
   mem-reaper      abandoned agent-browser daemons, stale Agent Chrome tabs, huge renderers, swap watch  (macOS, 2 min)
   stale-prompts   permission prompts left open > 1 h for an app that already has the permission (macOS, 5 min)
+  idle-simulators iOS Simulators booted over 2 h with no build/test running: shut down + one alert (macOS, 10 min)
   docker-hygiene  report-only list of old/dangling images; deletes nothing                       (daily)
 
 One config file ~/.config/machine-health/config (KEY=VALUE; STUCK_WATCH_*, MEM_REAPER_*, MACHINE_HEALTH_*, NTFY_*),
@@ -38,7 +39,7 @@ os.environ["PATH"] = os.environ.get("PATH", "") + ":/opt/homebrew/bin:/usr/local
 
 def checks():
     """name -> {interval, darwin_only, make() -> callable(dry, force) -> summary str, what}."""
-    import stuck_watch, mem_reaper, stale_prompts, docker_hygiene
+    import stuck_watch, mem_reaper, stale_prompts, docker_hygiene, idle_simulators
     sw = {}
 
     def stuck(dry=False, force=False):
@@ -50,6 +51,7 @@ def checks():
         "stuck-watch": dict(interval=int(stuck_watch.INTERVAL), mac=True, fn=stuck),
         "mem-reaper": dict(interval=120, mac=True, fn=mem_reaper.run),
         "stale-prompts": dict(interval=300, mac=True, fn=stale_prompts.run),
+        "idle-simulators": dict(interval=600, mac=True, fn=idle_simulators.run),
         "docker-hygiene": dict(interval=86400, mac=False, fn=docker_hygiene.run),
     }
 

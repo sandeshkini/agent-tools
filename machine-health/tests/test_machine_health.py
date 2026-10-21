@@ -2,6 +2,7 @@ import json, os, sys, unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import docker_hygiene as dh
 import mem_reaper as mr
+import idle_simulators as isim
 import stale_prompts as sp
 
 
@@ -71,6 +72,25 @@ class MemReaper(unittest.TestCase):
 
     def test_etime(self):
         self.assertEqual(mr.etime_s("10-18:42:28"), 10 * 86400 + 18 * 3600 + 42 * 60 + 28)
+
+
+class IdleSimulators(unittest.TestCase):
+    U = "AAAAAAAA-1111-2222-3333-444444444444"
+    PS = (f" 10 2-05:00:00 /x/launchd_sim /Users/a/Library/Developer/CoreSimulator/Devices/{U}/data/var/run/launchd_sim_socket\n"
+          " 11 00:05 /usr/bin/python3 foo.py\n")
+
+    def test_shutdown_when_old_and_idle(self):
+        sims, active = isim.parse(self.PS)
+        self.assertEqual(isim.decide(sims, active, 7200)[0], "shutdown")
+
+    def test_kept_when_build_active(self):
+        sims, active = isim.parse(self.PS + " 12 00:10 /usr/bin/xcodebuild -scheme cos test\n")
+        self.assertEqual(isim.decide(sims, active, 7200)[0], "none")
+
+    def test_kept_when_young_or_none(self):
+        sims, active = isim.parse(self.PS.replace("2-05:00:00", "00:30:00"))
+        self.assertEqual(isim.decide(sims, active, 7200)[0], "none")
+        self.assertEqual(isim.decide({}, [], 7200)[0], "none")
 
 
 if __name__ == "__main__":

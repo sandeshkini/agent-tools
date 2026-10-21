@@ -15,3 +15,5 @@
 # MEM_REAPER_DAEMON_IDLE_S=7200
 # --- stale-prompts
 # MACHINE_HEALTH_STALE_PROMPT_S=3600
+# --- idle-simulators
+# MACHINE_HEALTH_SIM_IDLE_S=7200   # booted this long with no build/test = shut down
