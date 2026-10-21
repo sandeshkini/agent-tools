@@ -18,7 +18,7 @@ Test a build BEFORE it goes live: run it as a separate container (e.g. on :4002)
   LIFEOS_UPSTREAM=http://127.0.0.1:4002 ui-shot lifeos:habits
 A blank screenshot means the app crashed. Check `document.getElementById("root").innerHTML.length`.
 
-Theme: sets localStorage "lifeos-theme" (LifeOS's key) before loading. Harmless elsewhere.
+Theme: sets localStorage "cos-theme" and "lifeos-theme" before loading. Harmless elsewhere.
 Output: prints one PNG path per shot, e.g. /tmp/ui-shot/habits-desktop-light.png.
 Then read the PNGs (they're images) and judge them against design/DESIGN.md.
 
@@ -75,8 +75,16 @@ def digest(path):
         return ""
 
 
+# Own session per run, with a short idle timeout, closed at the end: the shared default session and its daemon
+# used to be left running for days (2026-10-21: 91 leaked daemons at ~1.4 GB each ran aibo-mac out of memory).
+SESSION = os.environ.get("AGENT_BROWSER_SESSION") or f"ui-shot-{os.getpid()}"
+ENV = {**os.environ, "AGENT_BROWSER_SESSION": SESSION, "AGENT_BROWSER_IDLE_TIMEOUT_MS": "600000"}
+if "AGENT_BROWSER_SESSION" not in os.environ and os.path.exists(os.path.expanduser("~/.agent-browser/config.json")):
+    ENV["AGENT_BROWSER_CDP"] = ENV.get("AGENT_BROWSER_CDP", "9333")   # a named session needs the Agent Chrome port itself
+
+
 def ab(*args, timeout=60):
-    return subprocess.run([AB, *args], capture_output=True, text=True, timeout=timeout).stdout.strip()
+    return subprocess.run([AB, *args], capture_output=True, text=True, timeout=timeout, env=ENV).stdout.strip()
 
 
 def start_proxy(upstream):
@@ -159,7 +167,7 @@ def main():
             for size in a.sizes.split(","):
                 w, h = SIZES[size]
                 ab("set", "viewport", str(w), str(h))
-                ab("eval", f"try{{localStorage.setItem('lifeos-theme','{theme}')}}catch(e){{}}")
+                ab("eval", f"try{{localStorage.setItem('lifeos-theme','{theme}');localStorage.setItem('cos-theme','{theme}')}}catch(e){{}}")
                 sep = "&" if "?" in url else "?"
                 ab("open", f"{url}{sep}_shot={int(time.time()*1000)}")   # cache-buster: avoid stale bundles
                 time.sleep(a.wait)
@@ -178,6 +186,7 @@ def main():
     finally:
         ab("set", "viewport", "1440", "900")
         ab("tab", "close")
+        ab("close")   # ends our own session's daemon (the Agent Chrome stays up)
         if srv:
             srv.shutdown()
 

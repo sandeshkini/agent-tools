@@ -52,6 +52,7 @@ systemd (Linux), not in a container.
 
 | Tool | What | Install |
 |---|---|---|
+| `mem-reaper` | aibo-mac only: every 2 min kills abandoned agent-browser daemons and Agent Chrome tabs/renderers, and pushes one ntfy when swap > 20 GB or pressure is critical | `mem-reaper/install.sh` |
 | `cptr-watchdog` | periodic self-heal for cptr's own service — re-registers it if the launchd job/systemd unit was deregistered entirely (not just crashed; `KeepAlive`/`Restart=always` don't cover that), restarts it if registered but unhealthy | `cptr-watchdog/install.sh` |
 | `computer-use` | **Macs only:** cua-driver + its daemon (desktop apps) and agent-browser (web pages), plus the optional Agent Chrome (CDP :9333). Installs the tools only; their MCP entries and skills come from `registry.toml` via `setup.sh --only wiring`. Linux (aibo-linux) uses computer-use-linux + agent-browser instead, also wired from the registry; cua-driver was removed there 2026-09-25 | `computer-use/install.sh [--agent-chrome]`, then `cua-driver permissions grant` |
 | `stuck-watch` | notices agent commands silently stuck on a macOS permission prompt / unanswered dialog (idle agent commands, unanswered TCC prompts, password/permission windows) and sends one ntfy push per issue; read-only, never kills or clicks. Any Mac | `stuck-watch/install.sh [--check\|--uninstall]` |
