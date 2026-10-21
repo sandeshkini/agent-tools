@@ -148,18 +148,9 @@ def reap_daemons():
 
 # ------------------------------------------------------------------ Agent Chrome
 def routines_running():
-    pa = os.environ.get("PERSONAL_AGENT_DIR") or os.path.join(HOME, "Documents", "personal", "personal-agent")
-    base = os.path.join(pa, "var", "routines")
-    try:
-        for d in os.listdir(base):
-            try:
-                os.kill(int(json.load(open(os.path.join(base, d, "running.json")))["pid"]), 0)
-                return True
-            except (OSError, ValueError, KeyError):
-                pass
-    except OSError:
-        pass
-    return False
+    """A personal-agent routine is a running `pa-routine` process. Looked up with ps, not by reading
+    personal-agent/var (~/Documents is privacy-protected: the launchd app would hang on a prompt)."""
+    return "bin/pa-routine" in sh("ps", "-axo", "args=")
 
 
 def cdp(path, t=8):

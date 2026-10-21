@@ -108,6 +108,8 @@ def cmd_run(args):
         for n, s in todo.items():
             print(f"{n}: {run_check(n, s, st, dry=dry, force=True)}")
         return
+    import faulthandler, signal
+    faulthandler.register(signal.SIGUSR1, file=open(os.path.join(STATE_DIR, "stacks.txt"), "w"))   # kill -USR1 <pid> dumps thread stacks
     log("START", f"machine-health checks: {', '.join(todo)}")
     def loop(n, spec):       # one thread per check: a slow start (stuck-watch reads an hour of TCC log) blocks nobody
         while True:
