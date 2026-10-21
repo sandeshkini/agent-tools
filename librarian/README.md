@@ -17,8 +17,10 @@ The librarian builds the wiki from what his agents did. The cos hub reads it, an
 ## Nightly (`nightly.py`)
 
 1. **Collect** (no model) everything new since the last run:
-   - chat turns from `ai-memory/sessions` (both machines). A chat that runs for days is read a turn at a time;
-     `librarian.json` counts the turns already read;
+   - chat turns from `ai-memory/sessions` (both machines), as the conversation in order: every line of his own
+     (up to 2,500 chars, keeping the start and the last quarter), each preceded by the agent reply he was answering
+     (up to 900 chars) and that run's keyword lines, plus the final reply (1,500). The work Mac's chats stay out.
+     A chat that runs for days is read a turn at a time; `librarian.json` counts the turns already read;
    - crew messages and the hub's agent names, from aibo-linux over SSH (`remote_collect.py`, scrubbed there with
      its own keys.env);
    - the cards he answered (`cos.db`, read-only through `docker exec`);
@@ -28,7 +30,8 @@ The librarian builds the wiki from what his agents did. The cos hub reads it, an
    Everything is scrubbed with this Mac's keys.env (`scrub.py`) and becomes source blocks with refs in `sources.json`.
 2. **File his fixes** (no model). A Fix becomes his words, pinned (`author sandesh@cos`), and replaces the old fact.
    Right and Wrong set `confirmed` and `flag`.
-3. **Extract, route, apply** (`core.py`). Agents' notes join the apply pass as candidates on their page and keep
+3. **Extract, route, apply** (`core.py`). Extract runs in chunks of 60k chars (up to 4 at once) and also keeps his
+   preferences, opinions and passing reasons, and replies he accepted, not only formal decisions. Agents' notes join the apply pass as candidates on their page and keep
    their id when added. Tidy and split never merge or replace a pinned fact.
 4. **Check and save.** A leak check runs on every new fact, then the store is saved and the run logged in `nights.json`.
 

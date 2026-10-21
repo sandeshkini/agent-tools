@@ -28,6 +28,13 @@ STATE = f"{R.DATA}/librarian.json"
 SKIP_DIR = re.compile(r"^/Users/artos|^/tmp|^/private/tmp|throwaway|p20smoke|^/$")
 KEY = re.compile(r"decid|because|root cause|turns out|didn't work|doesn't work|failed|instead|reverted|rolled back|"
                  r"already|the reason|lesson|gotcha|never|always|prefer", re.I)
+HIS_CAP, AGENT_CAP = 2500, 900   # per line, in chars; a longer one keeps its start and its last quarter
+
+
+def trim(x, n):
+    return x if len(x) <= n else x[:n * 3 // 4] + " […] " + x[-(n // 4):]
+
+
 TURN = re.compile(r"\n(?=\*\*(?:You|Claude|Assistant):\*\*)")
 blocks = []
 
@@ -147,11 +154,24 @@ def collect(st, lo, hi):
             seg.append(f"BRIEF (passed on): {you[0][:600]}")
         elif seen:
             seg.append("(this chat goes on from an earlier night)")
-        seg += [f"PASSED ON: {y[:400]}" for y in you if y.startswith("⟦") and (seen or y is not you[0])][:6]
-        seg += [f"HIM: {y[:600 if lead else 700]}" for y in own[:70 if lead else 25]]
-        seg += [f"AGENT NOTE: {x[:280]}" for x in [x for x in me[:-1] if KEY.search(x)][-6:]]
-        if me:
-            seg.append(f"AGENT FINAL: {me[-1][:1000]}")
+        seg += [f"PASSED ON: {y[:400]}" for y in you if y.startswith("⟦") and (seen or y is not you[0])][:8]
+        # the conversation in order: all of his own lines, each preceded by the agent's reply he was answering
+        # (the last of its run, trimmed) and the run's keyword lines; then the agent's final reply
+        run = []   # agent turns since his last line
+        for t in new:
+            body = t.split(":**", 1)[1].strip()
+            if t.startswith("**You:**"):
+                if body in own:
+                    if run:
+                        seg += [f"AGENT NOTE: {trim(x, 400)}" for x in [x for x in run[:-1] if KEY.search(x)][-3:]]
+                        seg.append(f"AGENT: {trim(run[-1], AGENT_CAP)}")
+                        run = []
+                    seg.append(f"HIM: {trim(body, HIS_CAP)}")
+            else:
+                run.append(body)
+        if run:
+            seg += [f"AGENT NOTE: {trim(x, 400)}" for x in [x for x in run[:-1] if KEY.search(x)][-6:]]
+            seg.append(f"AGENT FINAL: {trim(run[-1], 1500)}")
         if not own and not me:
             continue
         day = f"{m.group(1)}-{m.group(2)}-{m.group(3)}" if not seen else hi[:10]

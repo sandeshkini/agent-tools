@@ -203,10 +203,19 @@ Write candidate claims for the wiki, one JSON object per line (JSONL), nothing e
 - Facts about how he works, what he likes and his rules for all agents go on person/sandesh.
 - One page, one thing. When a broad page (like project/cos) already has a sub-page that fits, use it. When a topic
   keeps coming up with nothing of its own, propose a sub-page such as "new:project/cos-board|cos board".
-- Keep only what will still matter next week: decisions and their reasons, how things are set up, lessons, open
-  questions and promises, and changes that went live. Skip routine progress and anything about the agents' own
-  tooling chatter.
-- It's fine to write nothing for a block. Aim for quality: a busy night gives about 60–120 lines.
+- Keep what will still matter next week: decisions and their reasons, how things are set up, lessons, open
+  questions and promises, and changes that went live. Also keep, as kind "said" and on person/sandesh or the
+  page of the system it is about: his preferences, tastes and opinions, including ones given in passing
+  ("I don't like X", "too long", "keep it calm"), the reasons he gives, what he pushes back on or corrects, what he
+  asks agents to do differently, and how he thinks about money, family, home and his tools. An agent's reply he
+  accepted or built on (AGENT line, then HIM agreeing or going on) counts as a decision of his; an explanation or
+  what went live that he will want to find later counts too. Write each as a self-contained sentence with the
+  reason when he gave one.
+- Skip routine progress, status updates, step-by-step work, one-off task details and the agents' own tooling
+  chatter, and never write a secret, token or number that looks like one.
+- Don't repeat a fact the page index already shows as a claim; a new reason or a change to it is worth a line.
+- It's fine to write nothing for a block, but read every HIM line: a short remark can hold a preference. A busy
+  night gives about 100–200 lines.
 
 # Page index
 {index}
@@ -265,7 +274,7 @@ def extract(night, pages, claims, text=None):
     blocks = text.split("\n\n=== ")
     chunks, cur = [], ""
     for b in blocks:
-        if len(cur) + len(b) > 120_000 and cur:
+        if len(cur) + len(b) > 60_000 and cur:
             chunks.append(cur)
             cur = ""
         cur += ("\n\n=== " if cur else "") + b.lstrip("= ")
