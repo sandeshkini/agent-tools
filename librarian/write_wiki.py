@@ -1,7 +1,9 @@
 """Librarian, wiki pass (weekly.py): rewrite pages as prose from their facts.
 
 Writes, in the store (the hub reads them; it never writes them):
-  data/wiki/<file>.md      one page each, topic prose; every sentence cites its facts as [^sandesh:0123]
+  data/wiki/<file>.md      one page each, an article: a :::box fact box, the lead, then sections chosen for the
+                           subject; every sentence cites its facts as [^sandesh:0123]. The record (decisions,
+                           lessons, open, history) isn't written here: cos draws it from the facts
   data/wiki/index.json     page id -> {file, written, facts_cited, model}
 The tree (data/tree.json) and the typed links (data/links.json) are kept as they are; a page the tree doesn't place
 shows under "Other" in cos until the tree is edited.
@@ -31,21 +33,27 @@ Sandesh himself later). You write one page from the facts given. Each fact has a
 status (current, or superseded = no longer true, kept as history). A fact whose author is sandesh@cos is his own
 correction: it is pinned, so keep its wording and never contradict it.
 
-Write calm, plain prose in short paragraphs; use a short list only where a list is the natural shape (steps, a set
-of rules). Explain what it is, how it works and why it is this way; define anything a newcomer wouldn't know. Never
-pad and never invent: every sentence rests on the facts. End every sentence with the facts it rests on, as
-[^sandesh:0123] (one or more). Never cite a superseded fact for something true now; use superseded facts only in
-"How it got here". Link other pages where they come up, as [[page id|name]]. No secrets, numbers or other people's
-private details. Leave out trivia and step-by-step progress.
+Write it as an encyclopedia article: calm, plain prose in short paragraphs, using a short list only where a list is the
+natural shape (steps, a set of rules). Explain what it is, how it works and why it is this way, and define anything
+a newcomer wouldn't know. Never pad and never invent: every sentence rests on the facts. End every sentence with the
+facts it rests on, as [^sandesh:0123] (one or more). Never cite a superseded fact for something true now. Link other
+pages where they come up, as [[page id|name]]. No secrets, numbers or other people's private details. Leave out
+trivia and step-by-step progress.
 
-Use exactly these sections (you may phrase a heading for the subject, e.g. "How he works" for a person):
-## In short          (2-3 sentences: what this is and why it matters)
-## How it works      (the parts and how they fit; mention sub-topics by link)
-## Why it's this way (the decisions that shaped it, each with its reason and what was turned down)
-## What we learnt    (lessons that still hold: what went wrong and what changed)
-## What's next       (what's open now, who owes it, since when; "Nothing open." if so)
-## How it got here   (3-5 lines of history: the turns that matter, oldest first)
-Output only the Markdown body (no title, no frontmatter). Keep it under 650 words; a page with few facts is short."""
+The shape, in this order:
+1. A fact box: the 4-6 things a reader would look up first (what it is, where it runs, who uses it, the rules
+   that bound it), one per line, each as "Label: value [^id]" with a label of one or two words:
+   :::box <what kind of subject it is, one or two words: Project, System, Person, Area>
+   Label: value [^sandesh:0123]
+   :::
+2. The lead: one or two paragraphs with no heading, saying what this is and why it matters, so a reader who stops
+   there knows the essentials.
+3. Two to five sections, each a "## " heading you choose for this subject (e.g. "The app", "How it runs", "How he
+   works"; never "In short", "Overview" or "Introduction"). Put each decision in the section it shaped, with its
+   reason and what was turned down; put a lesson where it applies.
+Don't write sections for decisions, lessons, open items or history: cos shows those under the article as the
+record, drawn straight from the facts. Output only the Markdown (no title, no frontmatter). Keep it under 1,000
+words; a page with few facts is short, and may have no sections at all."""
 
 
 def fname(pid):
@@ -73,7 +81,7 @@ def write(st, pid, parent, sections, titles):
     if parent:
         ctx.append(f"This page is part of [[{parent}|{titles.get(parent, parent)}]].")
     if sections:
-        ctx.append("This page is a hub. In \"How it works\", walk through its sub-topics, one short paragraph per group, "
+        ctx.append("This page is a hub. Walk through its sub-topics in the sections, one short paragraph per group, "
                    "each linking its pages: " + "; ".join(f"{s['title']}: " + ", ".join(f"[[{p}|{titles.get(p, p)}]]" for p in s["pages"]) for s in sections))
     title = titles.get(pid) or st.pages[pid]["title"]
     prompt = (f'Write the page "{title}" ({pid}).\n' + "\n".join(ctx) + "\n\nPages you may link: " +
@@ -99,7 +107,7 @@ def write(st, pid, parent, sections, titles):
     u = j["usage"]
     rec = {"file": fname(pid), "written": datetime.date.today().isoformat(), "facts_given": len(fs),
            "facts_cited": len(cited & known), "dropped_citations": len(cited - known), "model": "claude-sonnet-5-5",
-           "in": u["input_tokens"] + u["cache_read_input_tokens"] + u["cache_creation_input_tokens"], "out": u["output_tokens"],
+           "shape": "article", "in": u["input_tokens"] + u["cache_read_input_tokens"] + u["cache_creation_input_tokens"], "out": u["output_tokens"],
            "usd_equiv": j.get("total_cost_usd") or 0}
     print(pid, {k: rec[k] for k in ("facts_given", "facts_cited", "dropped_citations", "in", "out")}, flush=True)
     return pid, rec

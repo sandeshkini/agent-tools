@@ -45,7 +45,10 @@ The librarian builds the wiki from what his agents did. The cos hub reads it, an
 2. **Split:** give pages still over 30 facts sub-pages (`restructure.py`).
 3. **Aliases:** refresh page aliases (`link.py`).
 4. **Rewrite:** write fresh prose for every page whose facts changed since it was last written (`write_wiki.py`; `--all`
-   rewrites every page). His fixes are pinned, so the prose keeps their wording.
+   rewrites every page). Each page is an article: a `:::box` fact box, a lead with no heading, then two to five
+   sections chosen for the subject. Decisions, lessons, open items and history aren't written as prose; cos draws
+   them under the article as "the record", straight from the facts. His fixes are pinned, so the prose keeps their
+   wording.
 
 ## By hand
 
