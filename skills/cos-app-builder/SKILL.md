@@ -35,6 +35,9 @@ often taken).
   `var(--surface)`, `--card`, `--ink`, `--line`, `--accent`, `--font`, `--font-head`, `--r-md`. A static app gets
   `--cos-bg`, `--cos-card`, `--cos-ink`, `--cos-line`, `--cos-accent`, `--cos-font`, `--cos-radius`.
 - **Phones:** the shell's title bar names the app, so hide your own title at ≤ 768px.
+- **Apps launcher:** declare every page in app.json `pages` (`key`, `label`, a lucide `icon`, a `badge` if it
+  counts something), plus the app's `icon` and `order`; the panel's Apps launcher is built from that alone
+  (docs/apps.md "In the panel"). No `pages`: one entry for the app; `"launcher": false` hides it.
 - **Frame protocol:** a worker app does `import { cosFrame } from '/kit/cos-frame.js'`, then calls
   `frame.ready(page, title)` once it has drawn, and follows `navigate` to its pages.
 - **Static apps:** read `cos.page`, and listen for the `cos-page` and `cos-theme` events.
