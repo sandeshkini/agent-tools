@@ -65,6 +65,7 @@ renders while you stream it, so write it top to bottom like normal text.
 | `Show` | **`when`** {expr} | blocks, shown only while `when` is true |
 | `Agent` | **`id`** ("machine:chat id"), `note` | none; that agent's live card, tap opens its chat |
 | `Agents` | `filter`: needs·running·open·all, `limit` {n, 5}, `title` | none; a live list of agents on the board |
+| `Screen` | **`machine`**, `display`, `note`, `size`: card·small | none; that machine's screen, live while you share it |
 | `<pack>.<Name>` | the args the pack declares, `title` | none; live data from a pack (see below) |
 
 `Checklist` also takes `hideDone={flag}`.
@@ -112,12 +113,15 @@ block when a live component shows them.
 - **`<Agents filter="needs" limit={3}/>`**: the board's own list: `needs` (waiting for him), `running`
   (working or stalled), `open` (finished, tab still open), `all` (the three, needs first; default).
   The Chief's own chats are never listed. Empty is fine: "Nothing needs you" is news.
+- **`<Screen machine="aibo-linux"/>`**: a live picture of that machine's screen, with what you're doing
+  and Watch / Take over / Hand back for him. It plays only while you share the screen (`share_screen`;
+  your chat shows a card by itself then, so don't add one to every reply). Put one in a reply when the
+  picture says it better than words, for example when you ask him to type a code on the page you're on.
+  You never see its picture and he decides whether to take over; `note="…"` is the line it shows while
+  nobody shares.
 - **Pack components**: `<pack.Name …/>`. Each pack declares its own; this instance has:
 
-  - `<lifeos.Habits/>`: Today's habits, done or not (x-a-week ones with this week's count)
-  - `<lifeos.Bills days={7}/>`: Loan, lease and mortgage payments due in the next N days, with the total. Args: `days` (how many days ahead), default 7
-  - `<lifeos.Tasks project="_inbox"/>`: Open tasks in one project (the inbox by default). Args: `project` (project id: _inbox, home-minor, money-legal, relationships, …), default '_inbox'
-  - `<lifeos.House days={3}/>`: House chores that are due or late (and, with days, coming up). Args: `days` (also what's due in the next N days), default 0
+  (none on this instance)
 
   The hub fetches the data (read only, cached under a minute); the panel draws it as a checklist,
   list, table or stat row with a link to the pack's page. Every one takes `title="…"`, `limit={n}`,
@@ -153,8 +157,8 @@ panel runs in a locked box. **Only then**: anything the catalog can draw belongs
 - **Keep it small**: a few KB to tens of KB (the hard cap is 200 KB). Phone first: it's often 360 px wide.
 - **Theme**: CSS variables `--cos-bg`, `--cos-surface`, `--cos-ink`, `--cos-ink-2`, `--cos-ink-3`, `--cos-line`,
   `--cos-accent`, `--cos-accent-bg`, `--cos-accent-ink`, `--cos-pos`, `--cos-warn`, `--cos-neg`, `--cos-blue`,
-  `--cos-font`, `--cos-radius`; `cos.theme` is `"light"`/`"dark"`, and a `cos-theme` event fires on a switch
-  (re-read the variables then).
+  `--cos-font`, `--cos-radius` (they carry Sandesh's chosen colour theme); `cos.theme` is `"light"`/`"dark"`,
+  `cos.palette` the theme's name, and a `cos-theme` event fires on a switch of either (re-read the variables then).
 - **The `cos` helper**: `cos.resize(px)` / `cos.fit()` (resize the box to the content), and
   `cos.send("…")`: suggests a message for the chat the app is in. Sandesh sees the exact text, a tap
   puts it in the message box, and he sends it himself; it's never sent by itself. Write it as the full instruction.
