@@ -24,7 +24,8 @@ AUTHOR = "librarian@aibo-mac"
 CLAUDE = os.environ.get("LIBRARIAN_CLAUDE") or "claude-sandesh"   # his plan, never an API key
 RULES = open(f"{HERE}/LIBRARIAN.md").read()
 SOURCES = json.load(open(f"{ROOT}/sources.json")) if os.path.exists(f"{ROOT}/sources.json") else {}
-FOLDED = {}   # note or fix id -> the claim it became ("dropped" if the librarian dropped it), for data/folded.json
+FOLDED = {}    # note or fix id -> the claim it became ("dropped" if the librarian dropped it), for data/folded.json
+DROPPED = []   # candidates that didn't make it in, with the reason: appended to data/dropped.jsonl by save()
 SECTIONS = ("now", "decisions", "lessons", "open", "history")
 PREFIX = re.compile(r"^(person|area|project|system|machine)/[a-z0-9][a-z0-9-]*$|^~[a-z]+/[a-z0-9][a-z0-9-]*$")
 lock = threading.Lock()
@@ -83,6 +84,11 @@ def removed_ids():
     return out
 
 
+def dropped(night, page, c, reason):
+    DROPPED.append({"night": night, "page": page, "ref": c.get("ref", ""), "kind": c.get("kind", ""),
+                    "date": c.get("date", ""), "text": c.get("text", ""), "reason": reason})
+
+
 def save(pages, claims):
     for cid in removed_ids():
         claims.pop(cid, None)
@@ -94,6 +100,13 @@ def save(pages, claims):
     if FOLDED:
         old = json.load(open(f"{DATA}/folded.json")) if os.path.exists(f"{DATA}/folded.json") else {}
         write_atomic(f"{DATA}/folded.json", json.dumps({**old, **FOLDED}, indent=0))
+    if DROPPED:   # append-only, so an audit can see what each night left out and why; never a secret-looking line
+        sys.path.insert(0, HERE)
+        from scrub import leaks
+        keep = [d for d in DROPPED if not leaks(d["text"]) and not re.search(r"\[(secret[^\]]*|number|ip|email)\]", d["text"])]
+        with open(f"{DATA}/dropped.jsonl", "a") as f:
+            f.write("".join(json.dumps(d, ensure_ascii=False) + "\n" for d in keep))
+        DROPPED.clear()
 
 
 def new_id(claims):
@@ -211,6 +224,12 @@ Write candidate claims for the wiki, one JSON object per line (JSONL), nothing e
   accepted or built on (AGENT line, then HIM agreeing or going on) counts as a decision of his; an explanation or
   what went live that he will want to find later counts too. Write each as a self-contained sentence with the
   reason when he gave one.
+- Also keep facts about him and his world that he states in passing while working on something else: his
+  business and how it is set up, his work, family, home, travel, health, money arrangements and the people around
+  him (as kind "said", on the page they are about; private matters on a ~sandesh/ page). A long chat about one
+  decision often holds several such facts; write one candidate for each, not only the headline decision.
+- When he adds a detail to something he decided before (an exception, a "but also", a reason, which option of a
+  list he took), write it as its own candidate with that detail, even if the decision itself is already on the page.
 - Skip routine progress, status updates, step-by-step work, one-off task details and the agents' own tooling
   chatter, and never write a secret, token or number that looks like one.
 - Don't repeat a fact the page index already shows as a claim; a new reason or a change to it is worth a line.
@@ -244,13 +263,20 @@ Answer with JSON only, in this shape:
 
 Ops (use the candidate's number as "c"):
 - {{"op": "add", "c": 3, "section": "now", "text": "<optional cleaner wording>"}}: a new claim.
-- {{"op": "confirm", "id": "sandesh:0042", "c": 3}}: it repeats an existing claim; add its source.
+- {{"op": "confirm", "id": "sandesh:0042", "c": 3}}: it says nothing the existing claim doesn't already say; add its
+  source. Only when it adds nothing at all.
+- {{"op": "enrich", "id": "sandesh:0042", "c": 3, "text": "<the claim rewritten to hold both>"}}: it repeats an
+  existing claim but adds something: a detail, an exception, a reason, a name, which option he took. Write one
+  claim that keeps everything the old one said plus the new part; it keeps every source.
 - {{"op": "supersede", "id": "sandesh:0042", "c": 5, "section": "now", "text": "<optional>"}}: a newer claim
   replaces an older one. The old one moves to history.
 - {{"op": "resolve", "id": "sandesh:0050", "c": 6, "text": "<what settled it>"}}: an open item is now settled.
 - {{"op": "merge", "ids": ["sandesh:0011", "sandesh:0012"], "section": "now", "text": "<merged claim>"}}: two or
   more existing claims say nearly the same thing; join them, keeping every source.
-- {{"op": "drop", "c": 7, "reason": "<progress | duplicate | not durable | wrong page | secret>"}}.
+- {{"op": "drop", "c": 7, "reason": "<progress | duplicate | not durable | wrong page | secret>"}}. A candidate that
+  repeats a claim is a confirm or an enrich, not a drop. A candidate in his own words (kind said) that sets how
+  something should look, work or be done is durable: never drop it as "not durable"; if it adds a detail to an
+  existing claim, it is an enrich.
 
 Every candidate must get exactly one op. Keep decisions as decisions (needs said or relayed), and put "tried, didn't
 work" in lessons. Write in plain, short sentences; keep [[page]] links.
@@ -267,14 +293,33 @@ Answer with JSON only: {{"{pid}": {{"summary": "...", "ops": [ ... ]}}}}
 {page}"""
 
 
+CHUNK = 30_000   # chars per extract call: in a 60k chunk a dense chat yielded only its headline decisions
+
+
+def split_block(b, cap=CHUNK * 4 // 5):
+    """A source block longer than cap, cut at his lines into parts that each keep the block's header (and ref)."""
+    if len(b) <= cap:
+        return [b]
+    head, _, body = b.partition("\n")
+    parts, cur = [], ""
+    for seg in re.split(r"\n(?=HIM: )", body):
+        if cur and len(cur) + len(seg) > cap:
+            parts.append(cur)
+            cur = ""
+        cur += ("\n" if cur else "") + seg
+    if cur:
+        parts.append(cur)
+    return [f"{head} · part {i + 1} of {len(parts)}\n{x}" for i, x in enumerate(parts)]
+
+
 def extract(night, pages, claims, text=None):
     text = open(f"{WORK}/in/{night}.txt").read() if text is None else text
     if not text.strip():
         return []
-    blocks = text.split("\n\n=== ")
+    blocks = [p for b in text.split("\n\n=== ") for p in split_block(b.lstrip("= "))]
     chunks, cur = [], ""
     for b in blocks:
-        if len(cur) + len(b) > 60_000 and cur:
+        if len(cur) + len(b) > CHUNK and cur:
             chunks.append(cur)
             cur = ""
         cur += ("\n\n=== " if cur else "") + b.lstrip("= ")
@@ -310,6 +355,7 @@ def route(night, cands, pages, claims):
             v = m.get(c["page"], {})
             tgt = v.get("use") or v.get("create")
             if tgt not in pages:
+                dropped(night, c["page"], c, "route found no page")
                 continue
             c["page"] = tgt
         out.append(c)
@@ -342,7 +388,11 @@ def apply_ops(pid, res, cands, pages, claims, night, stats):
         if old and not old["id"].startswith(PERSON + ":"):
             kind = "conflict"     # another person's claim: never edit it
         sec = op.get("section") if op.get("section") in SECTIONS else (c or {}).get("section", "now")
-        if kind in ("supersede", "resolve") and pinned(old) and (c or {}).get("kind") != "said":
+        if kind == "confirm" and c and old and op.get("text") and op["text"].strip() != old["text"].strip():
+            kind = "enrich"   # a confirm that rewrites the text carries something new: keep it
+        if kind == "enrich" and not (c and old and op.get("text")):
+            kind = "confirm" if c and old else "keep"
+        if kind in ("supersede", "resolve", "enrich") and pinned(old) and (c or {}).get("kind") != "said":
             kind = "add" if c else "keep"   # his correction stays; an agent's newer line sits beside it
         if kind == "add" and c:
             new_claim(claims, c, pid, sec, op.get("text"), night)
@@ -350,6 +400,13 @@ def apply_ops(pid, res, cands, pages, claims, night, stats):
             old["refs"] = sorted(set(old["refs"] + [c["ref"]]))
             if c.get("note"):
                 FOLDED[c["note"]] = old["id"]
+        elif kind == "enrich":
+            nid = new_claim(claims, c, pid, old["section"], op["text"], night)
+            strong = [k for k in ("said", "relayed", "observed", "inferred") if k in (old["kind"], c.get("kind"))]
+            claims[nid].update(refs=sorted(set(old["refs"] + [c["ref"]])), kind=strong[0] if strong else old["kind"],
+                               why=c.get("why") or old.get("why", ""), rejected=c.get("rejected") or old.get("rejected", ""),
+                               replaces=sorted(set(claims[nid].get("replaces", []) + [old["id"]])))
+            old.update(status="superseded", superseded_by=nid, superseded_on=night)
         elif kind == "supersede" and old:
             if c:
                 nid = new_claim(claims, c, pid, sec, op.get("text"), night)
@@ -379,8 +436,12 @@ def apply_ops(pid, res, cands, pages, claims, night, stats):
         elif kind == "conflict" and c:
             nid = new_claim(claims, c, pid, sec, op.get("text"), night)
             claims[nid]["disputes"] = op.get("id")
-        elif kind == "drop" and c and c.get("note"):
-            FOLDED[c["note"]] = "dropped"
+        elif kind == "drop" and c:
+            dropped(night, pid, c, op.get("reason") or "no reason given")
+            if c.get("note"):
+                FOLDED[c["note"]] = "dropped"
+        if c is not None:
+            c["_op"] = kind
         stats[kind] = stats.get(kind, 0) + 1
 
 
@@ -419,10 +480,20 @@ def apply(night, cands, pages, claims):
             res = parse_json(out)
         except Exception:
             print(f"  {night}: could not parse apply output for {batch}", flush=True)
+            for pid in batch:
+                for c in by[pid]:
+                    c["_op"] = "unreadable"
+                    if not c.get("note"):
+                        dropped(night, pid, c, "apply output unreadable")
             continue
         for pid in batch:
             if pid in res:
                 apply_ops(pid, res[pid], by[pid], pages, claims, night, stats)
+    for pid, cs in by.items():   # a candidate the model gave no op is lost: say so
+        for c in cs:
+            if "_op" not in c and not c.get("note"):
+                dropped(night, pid, c, "no op from apply")
+                stats["no op"] = stats.get("no op", 0) + 1
     for c in cands:   # a note the model gave no op: it's his words (or relayed), so it goes in as it is
         if c.get("note") and c["note"] not in FOLDED:
             new_claim(claims, c, c["page"], c["section"], None, night)

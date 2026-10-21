@@ -28,6 +28,12 @@ STATE = f"{R.DATA}/librarian.json"
 SKIP_DIR = re.compile(r"^/Users/artos|^/tmp|^/private/tmp|throwaway|p20smoke|^/$")
 KEY = re.compile(r"decid|because|root cause|turns out|didn't work|doesn't work|failed|instead|reverted|rolled back|"
                  r"already|the reason|lesson|gotcha|never|always|prefer", re.I)
+# "You" turns that the harness, a skill or the hub wrote, not him: read as HIM lines they cost about a tenth of a
+# night's input and lead the extract to file a skill's instructions as his rules
+NOT_HIM = re.compile(r"\s*(Base directory for this skill:|This session is being continued from a previous|"
+                     r"You are running a routine|The following is prior conversation context|"
+                     r"\[Your previous response had no visible output|\[CLAUDE CODE BACKGROUND|Reply with just:|"
+                     r"From the hub: )")
 HIS_CAP, AGENT_CAP = 2500, 900   # per line, in chars; a longer one keeps its start and its last quarter
 
 
@@ -148,7 +154,7 @@ def collect(st, lo, hi):
         lead = name == "Chief" or name.endswith(" lead")
         you = [t.split(":**", 1)[1].strip() for t in new if t.startswith("**You:**")]
         me = [t.split(":**", 1)[1].strip() for t in new if t.startswith(("**Claude:**", "**Assistant:**"))]
-        own = [y for y in you if not re.match(r"\s*(⟦|<|\[Image|\[SYSTEM|Caveat:)", y) and len(y) > 3]
+        own = [y for y in you if not re.match(r"\s*(⟦|<|\[Image|\[SYSTEM|Caveat:)", y) and not NOT_HIM.match(y) and len(y) > 3]
         seg = []
         if seen == 0 and you and you[0].startswith("⟦"):
             seg.append(f"BRIEF (passed on): {you[0][:600]}")

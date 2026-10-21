@@ -27,11 +27,15 @@ The librarian builds the wiki from what his agents did. The cos hub reads it, an
    - new group ledger lines;
    - any memory episodes from Graphiti's export or `imports/`.
 
-   Everything is scrubbed with this Mac's keys.env (`scrub.py`) and becomes source blocks with refs in `sources.json`.
+   Lines in his turn that a skill, the harness or the hub wrote (skill bodies, session summaries, routine prompts,
+   hub notices) are left out. Everything is scrubbed with this Mac's keys.env (`scrub.py`) and becomes source blocks with refs in `sources.json`.
 2. **File his fixes** (no model). A Fix becomes his words, pinned (`author sandesh@cos`), and replaces the old fact.
    Right and Wrong set `confirmed` and `flag`.
-3. **Extract, route, apply** (`core.py`). Extract runs in chunks of 60k chars (up to 4 at once) and also keeps his
-   preferences, opinions and passing reasons, and replies he accepted, not only formal decisions. Agents' notes join the apply pass as candidates on their page and keep
+3. **Extract, route, apply** (`core.py`). Extract runs in chunks of 30k chars (up to 4 at once; a longer chat is cut
+   at his lines into parts) and also keeps his preferences, opinions and passing reasons, replies he accepted, and
+   facts about him said in passing (business, family, home, money), not only formal decisions. A candidate that
+   repeats a fact but adds a detail is an `enrich`: the fact is rewritten to hold both and keeps every source. Every
+   candidate that doesn't make it in (dropped, no page, no op) goes to `data/dropped.jsonl` with the reason. Agents' notes join the apply pass as candidates on their page and keep
    their id when added. Tidy and split never merge or replace a pinned fact.
 4. **Check and save.** A leak check runs on every new fact, then the store is saved and the run logged in `nights.json`.
 

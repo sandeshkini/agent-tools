@@ -56,7 +56,8 @@ involves another page.
 2. **Newest wins, and nothing is deleted.** When a newer claim replaces an older one, supersede the old one. It moves
    to history, so the past stays visible.
 3. **One fact, one claim.** If a source repeats a fact that is already there, `confirm` it (add the ref) instead of
-   adding a copy.
+   adding a copy. If it repeats it but adds something (a detail, an exception, a reason), `enrich` it: one claim that
+   says both.
 4. **Keep pages short, one page per thing.** Merge small related claims. The now section of a page should stay under
    about 25 claims. A broad page gets sub-pages (`project/cos-board`, with `parent: project/cos`); use them.
 5. **Never store:**
