@@ -51,7 +51,23 @@ LOG = HOME / "Library" / "Logs" / "mac-apps.log"
 _pa = HOME / "Applications" / "Personal Agent"
 APPS = Path(os.environ.get("MAC_APPS_DIR") or (_pa if _pa.is_dir() else HOME / "Applications" / "Agent Apps"))
 PREFIX = os.environ.get("MAC_APPS_BUNDLE_PREFIX", "local.agent-apps")
-SIGN_ID = os.environ.get("MAC_APPS_SIGN_IDENTITY", "-")
+def _default_sign_id():
+    """A rebuilt ad-hoc app has a new code hash, so macOS drops its privacy grants (Full Disk Access). When
+    MAC_APPS_SIGN_IDENTITY is unset and the Keychain has exactly one valid code-signing identity, use it:
+    its signature is stable across rebuilds, so the grant survives. Otherwise ad-hoc."""
+    env = os.environ.get("MAC_APPS_SIGN_IDENTITY")
+    if env is not None:
+        return env
+    try:
+        r = subprocess.run(["security", "find-identity", "-v", "-p", "codesigning"],
+                           capture_output=True, text=True, timeout=15)
+        ids = re.findall(r'^\s*\d+\) ([0-9A-F]{40}) "', r.stdout, re.M)
+    except (OSError, subprocess.SubprocessError):
+        return "-"
+    return ids[0] if len(ids) == 1 else "-"
+
+
+SIGN_ID = _default_sign_id()
 CONFIG_NAME = "mac-apps.json"        # in Contents/Resources: marks an app this tool built
 TCC_DB = "/Library/Application Support/com.apple.TCC/TCC.db"
 USER_TCC_DB = str(HOME / "Library/Application Support/com.apple.TCC/TCC.db")
