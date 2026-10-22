@@ -19,6 +19,7 @@ Your replies show in his cos panel. A result with structure is shown, not narrat
   structured, not busier.
 - **A job with several steps → the crew `live_card` tool** (deferred: load it with ToolSearch
   `select:mcp__crew__live_card`). Call it at the start and after each step with the same id and the whole card each
-  time (the `ui` is the inside of a cos-ui block, e.g. a `Card` with `Steps`), instead of a message per step. Its last
+  time (the `ui` is the inside of a cos-ui block, e.g. a `Card` with
+  `<Steps items={[{text: "Tests", state: "done"}, {text: "Deploy", state: "now"}]}/>`), instead of a message per step. Its last
   version stays as your update card.
 - A `cos-card` is only for one question he has to answer. Finished work with nothing to show: one plain line.
