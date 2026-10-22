@@ -40,7 +40,7 @@ your screen live in your chat and on your update card. Rules:
 
 | Need | Use |
 |---|---|
-| Anything inside a web page, in the Agent Chrome | **agent-browser** (CLI): `snapshot -i`, `click @eN`, `press`, `keyboard type`, `download`, `screenshot`, `tab …` |
+| Anything inside a web page, in the Agent Chrome | **agent-browser** (CLI): `snapshot -i`, `click @eN`, `press`, `keyboard type`, `download`, `screenshot` (then `shot-shrink <png>` before Read), `tab …` |
 | Things drawn outside the page: 1Password inline menu, Chrome permission dialogs | cua-driver native `get_window_state` + pixel `click` |
 | Native Mac apps (Messages, 1Password app, System Settings) | cua-driver native tools |
 | Secrets | `pa-secret get NAME` (= fleet-secret: keys.env, Keychain fallback). Never print a secret |
@@ -309,3 +309,7 @@ over RustDesk.
   change settings.
 - When stuck on anything only a human can do, `notify` Sandesh with what you
   need, then wait.
+
+## Screenshots cost tokens
+
+An image costs w*h/750 tokens and stays in the chat. A raw `agent-browser screenshot` or cua-driver shot is ~1920 px wide (~2.3k tokens): run `shot-shrink <png>` on the file before you Read it (800 px, ~0.4k). Prefer snapshot/AX text over screenshots when text will do. JPEG doesn't help (priced by pixels).
