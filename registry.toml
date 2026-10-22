@@ -143,6 +143,10 @@ machines = ["aibo-linux"]
 path = "{agent_tools}/memory/standing-rules.md"
 machines = ["aibo-linux", "aibo-mac"]
 
+[instructions.cos-results]             # show structured results as cos-ui cards and long jobs as one live card (cos)
+path = "{agent_tools}/instructions/cos-results.md"
+machines = ["aibo-linux", "aibo-mac"]
+
 # --------------------------------------------------------------------------------- plugins
 # Claude Code plugins (Claude Code only: OpenCode and agy have no plugins). wiring adds the
 # marketplace and installs + enables the plugin at user scope; it never removes one.
