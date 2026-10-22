@@ -66,7 +66,7 @@ profile ("Agent"), data dir `~/Library/Application Support/Google/Chrome-Agent`.
   2. Open your page with `agent-browser --cdp 9333 --user-agent '<desktop Chrome UA, Macintosh>' --pin-tab open <url>`.
   3. Check `agent-browser eval 'navigator.userAgent'` says Macintosh, not iPhone, before signing in anywhere.
   4. Popups, downloads and screenshots need your tab in front: wrap them in `bin/pa-tab-front <url-part> <command>`.
-  5. When done, close your tabs, then `agent-browser close` (closes only your session, not the Agent Chrome). Never skip it: a leftover daemon holds ~1.4 GB (2026-10-21: 91 of them filled swap). Also `export AGENT_BROWSER_IDLE_TIMEOUT_MS=900000` so a forgotten one exits in 15 min. `machine-health` (its mem-reaper check) is only the safety net.
+  5. When done, close your tabs, then `agent-browser close` (closes only your session, not the Agent Chrome). Never skip it: a leftover daemon holds ~1.4 GB (2026-10-21: 91 of them filled swap). The Agent Chrome config sets `idleTimeout` 10m (a CDP-attached daemon is exempt from agent-browser's default 1 h exit, which is why they piled up). `machine-health` (its mem-reaper check) is only the safety net.
   Don't touch the default session's tabs. Examples: `routines/borderless-paystubs`, `routines/drive-files`.
 - **agent-browser config:** `~/.agent-browser/config.json` = `{"cdp": "9333"}`, so the
   default session attaches here and never launches a browser of its own; a named session needs `--cdp 9333`.

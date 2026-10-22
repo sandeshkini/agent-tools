@@ -5,6 +5,8 @@ import mem_reaper as mr
 import idle_simulators as isim
 import disk_usage as du
 import stale_prompts as sp
+import mem_guard as mg
+from unittest import mock
 
 
 def ev(msg, ts, pid=100):
@@ -102,6 +104,48 @@ class DiskUsage(unittest.TestCase):
     def test_free_pct_sane(self):
         pct, free, total = du.free_pct()
         self.assertTrue(0 < pct <= 100 and free < total)
+
+
+class MemGuard(unittest.TestCase):
+    def P(self):
+        mk = lambda ppid, age, args: dict(ppid=ppid, age=age, rss=1000, args=args)
+        return {
+            10: mk(1, 5000, "python3 /Users/x/.local/bin/claude --output-format stream-json"),              # a running agent: never
+            11: mk(1, 5000, "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),                 # his Chrome: never
+            12: mk(1, 5000, "/x/colima/limactl hostagent"),                                                   # colima: never
+            20: mk(1, 900, "/c/ms-playwright/chromium-1/Chromium --headless"),                                # orphan: yes
+            21: mk(77, 900, "/c/ms-playwright/chromium-1/Chromium --headless"),                               # live parent: no
+            22: mk(1, 30, "/c/ms-playwright/chromium-1/Chromium --headless"),                                 # too young: no
+            30: mk(1, 4000, "python3 /w/cos-wt-a/scripts/dev_hub.py --port 4390"),                           # old dev hub: yes
+            31: mk(1, 100, "python3 /w/cos-wt-a/scripts/fake_node.py"),                                       # young: no
+            40: mk(1, 5000, "python3 /w/cos-wt-b/scripts/dev_hub.py --port 4391"),                           # holder's child: spared
+            41: mk(900, 5000, "xcodebuild test"),
+            900: mk(1, 5000, "bash scripts/test.sh --strict"),                                                # lock holder
+        }
+        
+    def run_clear(self, holder=0):
+        with mock.patch.object(mg, "lock_holder", return_value=holder), mock.patch.object(mg.sw, "log"), \
+             mock.patch.object(mg.mr, "session_files", return_value={}):
+            P = self.P()
+            if holder:
+                P[40]["ppid"] = holder
+            return mg.clear(P, dry=True)
+
+    def test_kills_only_orphans_and_old_hubs(self):
+        done = " | ".join(self.run_clear())
+        self.assertIn("Playwright browser", done); self.assertIn("dev_hub.py --port 4390", done)
+        self.assertEqual(sum("Playwright" in d for d in self.run_clear()), 1)
+        for never in ("claude", "Google Chrome", "limactl"):
+            self.assertNotIn(never, done)
+
+    def test_lock_holder_tree_is_spared(self):
+        self.assertFalse(any("4391" in d for d in self.run_clear(holder=900)))
+        self.assertTrue(any("4391" in d for d in self.run_clear()))
+
+    def test_trigger(self):
+        self.assertTrue(mg.triggered(7, 9, 1)[0])      # 78% swap
+        self.assertTrue(mg.triggered(1, 9, 2)[0])      # pressure warning
+        self.assertFalse(mg.triggered(3, 9, 1)[0])
 
 
 if __name__ == "__main__":

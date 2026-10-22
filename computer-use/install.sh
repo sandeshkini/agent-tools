@@ -142,12 +142,16 @@ PL
 import json, os, sys
 p, port = sys.argv[1], sys.argv[2]
 cfg = json.load(open(p)) if os.path.exists(p) else {}
-if cfg.get("cdp") == port:
-    print(f"  ✓ agent-browser already points at :{port}")
+# A daemon attached to a CDP browser is "user-attached", which agent-browser exempts from its default 1 h idle exit,
+# so every session an agent forgot to close stayed for days at ~1.4 GB each (91 of them filled swap, 2026-10-21).
+# An explicit idleTimeout applies to them too.
+want = {"cdp": port, "idleTimeout": cfg.get("idleTimeout") or "10m"}
+if all(cfg.get(k) == v for k, v in want.items()):
+    print(f"  ✓ agent-browser already points at :{port}, idle timeout {cfg['idleTimeout']}")
 else:
-    cfg["cdp"] = port
+    cfg.update(want)
     json.dump(cfg, open(p, "w"))
-    print(f"  ✓ agent-browser now attaches to :{port} ({p})")
+    print(f"  ✓ agent-browser attaches to :{port}, idle daemons exit after {cfg['idleTimeout']} ({p})")
 PY
 
   # 1Password: a custom user-data-dir doesn't see the main Chrome's native-messaging host,

@@ -11,7 +11,7 @@ import re, subprocess, time
 import stuck_watch as sw
 from stale_prompts import etime_s
 
-ACTIVE = re.compile(r"(^|/)(xcodebuild|XCBBuildService|xctest|swift-build|testmanagerd|IDETestRunner|xcrun)( |$)|"
+ACTIVE = re.compile(r"(^|/)(xcodebuild|XCBBuildService|xctest|swift-build|xcrun)( |$)|"
                     r"(^|/)simctl( |$)|xcodebuild|xctest", re.I)
 UDID = re.compile(r"Devices/([0-9A-F]{8}-(?:[0-9A-F]{4}-){3}[0-9A-F]{12})", re.I)
 

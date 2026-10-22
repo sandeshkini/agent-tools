@@ -11,6 +11,8 @@
 Checks (see README.md):
   stuck-watch     agent commands stuck on a macOS prompt / unanswered dialogs; ntfy alerts      (macOS, every 60 s)
   mem-reaper      abandoned agent-browser daemons, stale Agent Chrome tabs, huge renderers, swap watch  (macOS, 2 min)
+  mem-guard       under memory pressure / swap > 70%: frees idle big agent-browser daemons, orphan Playwright browsers,
+                  unused simulators, old dev hubs, in that order; one ntfy per incident     (macOS, 60 s)
   stale-prompts   permission prompts left open > 1 h for an app that already has the permission (macOS, 5 min)
   idle-simulators iOS Simulators booted over 2 h with no build/test running: shut down + one alert (macOS, 10 min)
   disk-usage      free space + biggest folders under ~, warns under 15% free (report only)    (daily)
@@ -40,7 +42,7 @@ os.environ["PATH"] = os.environ.get("PATH", "") + ":/opt/homebrew/bin:/usr/local
 
 def checks():
     """name -> {interval, darwin_only, make() -> callable(dry, force) -> summary str, what}."""
-    import stuck_watch, mem_reaper, stale_prompts, docker_hygiene, idle_simulators, disk_usage
+    import stuck_watch, mem_reaper, mem_guard, stale_prompts, docker_hygiene, idle_simulators, disk_usage
     sw = {}
 
     def stuck(dry=False, force=False):
@@ -51,6 +53,7 @@ def checks():
     return {
         "stuck-watch": dict(interval=int(stuck_watch.INTERVAL), mac=True, fn=stuck),
         "mem-reaper": dict(interval=120, mac=True, fn=mem_reaper.run),
+        "mem-guard": dict(interval=60, mac=True, fn=mem_guard.run),
         "stale-prompts": dict(interval=300, mac=True, fn=stale_prompts.run),
         "idle-simulators": dict(interval=600, mac=True, fn=idle_simulators.run),
         "disk-usage": dict(interval=86400, mac=False, fn=disk_usage.run),
