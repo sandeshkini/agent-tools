@@ -24,7 +24,7 @@ Pick the component for the shape of the data, not decoration:
 
 - numbers → `Stat` (in a `Row`), with `change` for a before/after
 - steps or a run → `Steps`, plus `Progress` when there's a fraction
-- sizes, counts, costs per thing → `Chart type="bar"`; a trend over days → `Chart type="spark"`
+- numbers over time, parts of a whole, per-day habits, spreads → a `Chart` (see **Charts** for which type)
 - rows with several columns → `Table`; a few things, each with a status → `Grid` of `Card`s
 - options to choose between → a `Grid` of `Card`s (one per option, the pros in a line) and a `Button` per option
 
@@ -106,7 +106,7 @@ row, a link). One live card per job; a second job gets its own id.
 | `Stat` | **`value`**, `label`, `change` ("+41", "−1.1 GB"), `tone` | none |
 | `Progress` | **`value`** {n}, `max` {n, default 100}, `label`, `tone` | none |
 | `Steps` | **`items`** {[{text, state: done·now·todo·error·skip, note}]} | none; a timeline, note on the right (a time) |
-| `Chart` | `type`: bar·spark, `data` {[[label, n], …]} (bar), `values` {[n, …]} (spark, oldest first), `label`, `unit`, `tone` | none; at most 12 bars |
+| `Chart` | `type`: bar·line·area·donut·scatter·histogram·calendar·spark·number; data as `x` + `series`, `data` or `values`; `unit`, `format`: num·money·pct, `label`, `tone`, `stacked`, `horizontal`, `target`, `height` | none; see **Charts** |
 | `Table` | `columns` {[…]}, **`rows`** {[[…], …]} | none; cells allow **bold**/links |
 | `List` | `items` {[…]}, `ordered` {bool} | or a Markdown list as children |
 | `Checklist` | **`items`** {[{text, done}]} | none; read-only |
@@ -129,6 +129,60 @@ row, a link). One live card per job; a second job gets its own id.
 | `<pack>.<Name>` | the args the pack declares, `title` | none; live data from a pack (see below) |
 
 `Checklist` also takes `hideDone={flag}`.
+
+## Charts
+
+One `Chart`, any data. Pick the type by what Sandesh should see, not by variety:
+
+| To show | `type` | Data |
+|---|---|---|
+| amounts per named thing (costs, sizes) | `bar` (lies down, biggest first) | `data={[["Netflix", 23.99], …]}` |
+| amounts per month or day; this year vs last | `bar` (stands up); `stacked` for parts | `x` + `series` |
+| a trend, one or a few series | `line` | `x` + `series` |
+| one total growing; what it's made of over time | `area`; `stacked` | `x` + `series` |
+| parts of one whole (2–6 parts) | `donut` | `data` rows; past 6 they fold into "Other" |
+| one value per day (habit done, steps, spend) | `calendar` | `data={[["2026-10-14", 1], …]}` |
+| how values spread (receipt sizes, run times) | `histogram` | `values`: the raw numbers |
+| two measures against each other | `scatter` (≤ 3 series) | `data={[[x, y, "label"], …]}`, `xlabel`, `ylabel` |
+| one headline number and its trend | `number` | `values`, oldest first; `label` |
+| a small trend under a stat | `spark` | `values`, oldest first |
+
+- **Data shapes.** `x={["2026-08", "2026-09"]} series={[{name: "Food", values: [410, 380]}, …]}`, or
+  `data` rows `[[label, n, n2…]]` with `series={["Food", "Rent"]}` naming the columns, or `values={[…]}`.
+  ISO dates (`2026-10`, `2026-10-14`, `2026-10-14T09:00`) make a date axis: write dates, not "Oct 14".
+  `null` is a gap. Up to 8 series, 500 points.
+- **Numbers.** `format="money"` ($1,235, axes $1.2K), `format="pct"` (42 → 42%), or `unit="GB"` / `"h"` /
+  `"€"`. Give raw numbers, never strings with units.
+- **Emphasis beats colour.** When one series is the point, give the others `tone: "muted"` (gray), e.g.
+  last year behind this year. A lone series wears `tone` (accent by default). Don't use done/warn/error
+  tones for ordinary series.
+- **Combo:** in a `bar` chart, a series with `type: "line"` draws as a line on the same axis (an average,
+  a running total). Never two different scales in one chart: make two charts.
+- `target={3500} targetLabel="Budget"` draws a reference line. `height={260}` for a taller plot.
+- Sandesh can hover or tap any chart for exact values, so don't repeat every number in text; one `Stat` row
+  for the headline is enough.
+
+```cos-ui
+<Card title="Household spending, 2026">
+<Chart type="bar" stacked format="money" target={3500} targetLabel="Budget" x={["2026-07", "2026-08", "2026-09", "2026-10"]} series={[
+  {name: "Groceries", values: [1280, 1190, 1230, 1260]},
+  {name: "Dining", values: [720, 680, 490, 450]},
+  {name: "Kids", values: [1040, 1010, 720, 580]}
+]}/>
+</Card>
+```
+
+```cos-ui
+<Card title="Workouts: 4.1 a week" status="ok">
+<Chart type="calendar" tone="done" data={[["2026-10-13", 1], ["2026-10-14", 0], ["2026-10-15", 1], ["2026-10-17", 1], ["2026-10-19", 1], ["2026-10-20", 1]]}/>
+</Card>
+```
+
+```cos-ui
+<Card title="October so far: $3,268">
+<Chart type="donut" format="money" data={[["Groceries", 1260], ["Transport", 630], ["Kids", 580], ["Dining", 450], ["Other", 348]]}/>
+</Card>
+```
 
 ## State, expressions, inputs and forms
 
