@@ -8,7 +8,7 @@ description: >-
 # cos-card: your own update card
 
 Every agent chat on aibo-mac and aibo-linux shows up as an **update card** in Sandesh's Chief of Staff
-panel (`cos.personal.kingdomofluna.com`). Normally a model writes a one-line summary of your last
+panel (`aibo-mac.tailaacb38.ts.net`). Normally a model writes a one-line summary of your last
 reply. If your reply **ends with a `cos-card` block**, the panel shows your card instead: your question
 and buttons he can tap to answer you.
 
